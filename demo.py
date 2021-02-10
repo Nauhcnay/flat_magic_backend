@@ -168,7 +168,7 @@ def initial_models(path_to_ckpt):
     try:
         net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
     except:
-        net = nn.torch.nn.DataParallel(net)
+        net = torch.nn.DataParallel(net)
         net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
     net.eval()
 
