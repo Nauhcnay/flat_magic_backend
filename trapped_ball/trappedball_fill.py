@@ -569,6 +569,10 @@ def extract_region():
 
 def to_graph(fillmap, fillid):
 
+    # how to speed up this part?
+    # use another graph data structure
+    # or maybe use list instead of dict
+
     fills = {}
     for j in tqdm(fillid):
         
@@ -681,6 +685,9 @@ def graph_self_check(fill_graph):
 
 def split_region(result):
     
+    # this function could be parallel
+    # todo
+
     # get list of fill id
     fill_id = np.unique(result.flatten())
     fill_id_new = list(np.unique(result.flatten()).copy())
@@ -698,7 +705,7 @@ def split_region(result):
         fill_region = np.full(result.shape, 0, np.uint8)
         fill_region[np.where(result == j)] = 255
 
-        # corp to the region to speed up
+        # corp to a smaller region that only cover the current filling region to speed up
         # todo
 
         # assign new id to
@@ -841,7 +848,7 @@ def remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th):
     return fills_graph
 
 
-def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True):
+def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=False):
     
     """
     next step should be using multi threading in each step
@@ -853,6 +860,8 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True)
     low_th = int(max_height*max_width*low_th)
     max_th = int(max_height*max_width*max_th)
 
+    # 1. convert filling map to graphs
+    # this step take 99% of running time, need optimaization a lot
     if debug:
         print("Log:\tload fill_map.pickle")
         result = load_obj("fill_map.pickle")
@@ -878,14 +887,17 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True)
         print("Log:\tfind region neighbors")
         fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
 
+    # self check if the graph is constructed correctly 
     graph_self_check(fills_graph)              
 
-    # merge all small region to its largest neighbor
-    
+    # 2. merge all small region to its largest neighbor
+    # this step seems fast, it only takes around 20s to finish
+    print("Log:\tremove leaking color")
     fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
     
+    # 3. show the refined the result
     visualize_graph(fills_graph, result, region=None)
-    # map region graph back to fillmaps
+    
+    # 4. map region graph back to fillmaps
     result = to_fillmap(result, fills_graph)
-
     return result, fills_graph
