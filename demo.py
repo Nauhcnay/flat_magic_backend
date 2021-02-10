@@ -165,7 +165,11 @@ def initial_models(path_to_ckpt):
     
     # load model
     print("Log\tload %s"%path_to_ckpt)
-    net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
+    try:
+        net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
+    except:
+        net = nn.torch.nn.DataParallel(net)
+        net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
     net.eval()
 
     return net, device
