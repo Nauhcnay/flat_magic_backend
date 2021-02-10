@@ -1,136 +1,138 @@
 import argparse
 import logging
-import os
+
+import os, sys
+from os.path import *
+sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+
 from PIL import Image
-from torchvision import transforms
+from torchvision import transforms as T
 
 from unet import UNet
-from utils.data_vis import plot_img_and_mask
-from utils.dataset import BasicDataset
 
+from run import region_get_map
+
+
+def to_tensor(img):
+
+    transforms = T.Compose(
+                    [
+                        # to tensor will change the channel order and divide 255 if necessary
+                        T.ToTensor(),
+                        T.Normalize(0.5, 0.5, inplace = True)
+                    ]
+                )
+
+    return transforms(img)
+
+def denormalize(img):
+    # denormalize
+    inv_normalize = T.Normalize( mean=-1, std=2)
+
+    img_np = inv_normalize(img.repeat(3,1,1))
+    img_np = (img_np * 255).clamp(0, 255)
+    
+    # to numpy
+    img_np = img_np.cpu().numpy().transpose((1,2,0))
+    
+    return Image.fromarray(img_np.astype(np.uint8))
+
+def to_pil(f, size):
+    
+    if type(f) == str:
+        img = Image.open(f).convert("L")
+        
+    else:
+        img = f
+
+    w, h = img.size
+    if w > size or h > size:
+        ratio = size/w if w > h else size/h
+    else:
+        ratio = 1
+    return img.resize((int(w*ratio), int(h*ratio)))
 
 def predict_img(net,
                 full_img,
                 device,
-                scale_factor=1,
-                out_threshold=0.5):
+                size):
     net.eval()
 
-    img = torch.from_numpy(BasicDataset.preprocess(full_img, scale_factor))
-
+    # read image
+    print("Log:\tpredict image at size %d"%size)
+    img = to_tensor(to_pil(full_img, size))
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 
     with torch.no_grad():
         output = net(img)
 
-        if net.n_classes > 1:
-            probs = F.softmax(output, dim=1)
-        else:
-            probs = torch.sigmoid(output)
-
-        probs = probs.squeeze(0)
-
-        tf = transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.Resize(full_img.size[1]),
-                transforms.ToTensor()
-            ]
-        )
-
-        probs = tf(probs.cpu())
-        full_mask = probs.squeeze().cpu().numpy()
-
-    return full_mask > out_threshold
+    return denormalize(output[0])
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Predict masks from input images',
+    parser = argparse.ArgumentParser(description='Predict edge from line art',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--model', '-m', default='MODEL.pth',
+    
+    parser.add_argument('--model', '-m', default='./checkpoints/exp1/CP_epoch2001.pth',
                         metavar='FILE',
                         help="Specify the file in which the model is stored")
-    parser.add_argument('--input', '-i', metavar='INPUT', nargs='+',
-                        help='filenames of input images', required=True)
+    
+    parser.add_argument('--input', '-i', type=str,
+                        help='filename of single input image, include path')
 
-    parser.add_argument('--output', '-o', metavar='INPUT', nargs='+',
-                        help='Filenames of ouput images')
-    parser.add_argument('--viz', '-v', action='store_true',
-                        help="Visualize the images as they are processed",
-                        default=False)
-    parser.add_argument('--no-save', '-n', action='store_true',
-                        help="Do not save the output masks",
-                        default=False)
-    parser.add_argument('--mask-threshold', '-t', type=float,
-                        help="Minimum probability value to consider a mask pixel white",
-                        default=0.5)
-    parser.add_argument('--scale', '-s', type=float,
-                        help="Scale factor for the input images",
-                        default=0.5)
+    parser.add_argument('--output', '-o', type=str,
+                        help='filename of single ouput image, include path')
+
+    parser.add_argument('--input-path', type=str, default="./flatting/validation",
+                        help='path to input images')
+
+    parser.add_argument('--output-path', type=str, default="./results/val",
+                        help='path to ouput images')
 
     return parser.parse_args()
 
 
-def get_output_filenames(args):
-    in_files = args.input
-    out_files = []
-
-    if not args.output:
-        for f in in_files:
-            pathsplit = os.path.splitext(f)
-            out_files.append("{}_OUT{}".format(pathsplit[0], pathsplit[1]))
-    elif len(in_files) != len(args.output):
-        logging.error("Input files and output files are not of the same length")
-        raise SystemExit()
-    else:
-        out_files = args.output
-
-    return out_files
-
-
-def mask_to_image(mask):
-    return Image.fromarray((mask * 255).astype(np.uint8))
-
-
 if __name__ == "__main__":
+    
     args = get_args()
-    in_files = args.input
-    out_files = get_output_filenames(args)
 
-    net = UNet(n_channels=3, n_classes=1)
+    in_files = args.input
+
+    net = UNet(in_channels=1, out_channels=1, bilinear=True)
 
     logging.info("Loading model {}".format(args.model))
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
+    
     net.to(device=device)
     net.load_state_dict(torch.load(args.model, map_location=device))
 
     logging.info("Model loaded !")
 
-    for i, fn in enumerate(in_files):
-        logging.info("\nPredicting image {} ...".format(fn))
+    for f in os.listdir(args.input_path):
+        name, _ = splitext(f)
 
-        img = Image.open(fn)
+        logging.info("\nPredicting image {} ...".format(join(args.input_path, f)))
 
-        mask = predict_img(net=net,
-                           full_img=img,
-                           scale_factor=args.scale,
-                           out_threshold=args.mask_threshold,
-                           device=device)
+        
+        # predict edge and save image
+        edge = predict_img(net=net,
+                           full_img=join(args.input_path, f),
+                           device=device,
+                           size = 1024)
 
-        if not args.no_save:
-            out_fn = out_files[i]
-            result = mask_to_image(mask)
-            result.save(out_files[i])
-
-            logging.info("Mask saved to {}".format(out_files[i]))
-
-        if args.viz:
-            logging.info("Visualizing results for image {}, close to continue ...".format(fn))
-            plot_img_and_mask(img, mask)
+        edge.save(join(args.output_path, name + "_pred.png"))
+        
+        # trapped ball fill and save image
+        region_get_map(join(args.output_path, name + "_pred.png"), args.output_path,
+                            radius_set=[1], percentiles=[0],
+                            path_to_line = join(args.input_path, f),
+                            save_org_size = True)
+        
