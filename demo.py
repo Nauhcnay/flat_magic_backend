@@ -204,8 +204,8 @@ def main():
     # get base tcode number
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
-    parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/CP_epoch2501.pth")
-    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/CP_epoch5001.pth")
+    parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/")
+    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
     parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/")
     parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
     parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/")
