@@ -338,8 +338,8 @@ if __name__ == '__main__':
         radius_percentile_explor_repeat(radius_set2, args.input, "./exp3")
     elif args.exp4:
         # let's test 2 pass merge
-        line = "line.png"
-        line_sim = "line_simplify.png"
+        line = "./examples/line.png"
+        line_sim = "./examples/line_simplify.png"
         merge_exp(line, line_sim)
     else:
         in_path = "./flatting/size_2048/line_detection_croped"
