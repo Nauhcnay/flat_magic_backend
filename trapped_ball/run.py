@@ -43,7 +43,7 @@ def region_get_map(path_to_png,
         else:
             name = 0
 
-    ret, binary = cv2.threshold(img, 254, 255, cv2.THRESH_BINARY)
+    ret, binary = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
     fills = []
     result = binary # this should be binary numpu array
     
@@ -69,7 +69,7 @@ def region_get_map(path_to_png,
     if line.shape[:2] != binary.shape[:2]:
         line = cv2.resize(line, (binary.shape[1],binary.shape[0]), 
                         interpolation = cv2.INTER_AREA)
-    _, binary_line = cv2.threshold(line, 254, 255, cv2.THRESH_BINARY)
+    _, binary_line = cv2.threshold(line, 250, 255, cv2.THRESH_BINARY)
 
     assert len(radius_set) == len(percentiles)
 
