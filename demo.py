@@ -211,11 +211,11 @@ def main():
     # initailize
     nets = {}
     nets["1024"] = initial_models(args.ckpt_1024)
-    nets["1024_rand"] = initial_models(args.ckpt_512_rand)
+    nets["1024_rand"] = initial_models(args.ckpt_1024_rand)
     nets["512"] = initial_models(args.ckpt_512)
     nets["512_rand"] = initial_models(args.ckpt_512_rand)
     nets["256"] = initial_models(args.ckpt_256)
-    nets["256_rand"] = initial_models(args.ckpt_512_rand)
+    nets["256_rand"] = initial_models(args.ckpt_256_rand)
 
     
     # construct exmaples
