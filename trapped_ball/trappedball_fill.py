@@ -2,6 +2,12 @@ import cv2
 import numpy as np
 import pdb
 import pickle
+import time
+# it seemed that multi thread will not help to reduce running time
+# https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
+from multiprocessing import Pool
+from multiprocessing import freeze_support
+from functools import partial
 
 from tqdm import tqdm
 from PIL import Image
@@ -188,7 +194,7 @@ def flood_fill_single(im, seed_point):
     return pass1
 
 
-def flood_fill_multi(image, max_iter=20000):
+def flood_fill_multi(image, max_iter=20000, verbo=True):
     """Perform multi flood fill operations until all valid areas are filled.
     This operation will fill all rest areas, which may result large amount of fills.
 
@@ -199,7 +205,8 @@ def flood_fill_multi(image, max_iter=20000):
     # Returns
         an array of fills' points.
     """
-    print('floodfill')
+    if verbo:
+        print('floodfill')
 
     unfill_area = image
     filled_area = []
@@ -683,33 +690,60 @@ def graph_self_check(fill_graph):
                         print("Log:\tfind missing neighbor")
             # print("Log:\tregion %d has %d points"%(key, fill_graph[key]['area']))  
 
-def split_region(result):
+def flood_fill_single_proc(region_id, img):
+    
+    # construct fill region
+    fill_region = np.full(img.shape, 0, np.uint8)
+    fill_region[np.where(img == region_id)] = 255
+    return flood_fill_multi(fill_region, verbo=False)
+
+def flood_fill_multi_proc(func, fill_id, result, n_proc):
+    print("Log:\tmulti process spliting bleeding regions")
+    with Pool(processes=n_proc) as p:
+        return p.map(partial(func, img=result), fill_id)
+
+def split_region(result, multi_proc=True):
     
     # this function could be parallel
     # todo
 
     # get list of fill id
-    fill_id = np.unique(result.flatten())
-    fill_id_new = list(np.unique(result.flatten()).copy())
-    next_id = fill_id.max() + 1
-
-    # split each region if it is splited by ink region
+    fill_id = np.unique(result.flatten()).tolist()
+    fill_id.remove(0)
+    assert 0 not in fill_id
+    
     fill_points = []
-    for j in fill_id:
 
-        # skip strokes
-        if j == 0:
-            continue
+    # get each region ready to be filled
+    if multi_proc:
+        n_proc = 8
+        start = time.process_time()
+        
+        fill_points_multi_proc = flood_fill_multi_proc(flood_fill_single_proc, fill_id, result, n_proc)
+        for f in fill_points_multi_proc:
+            fill_points += f
 
-        # generate fill mask of that region
-        fill_region = np.full(result.shape, 0, np.uint8)
-        fill_region[np.where(result == j)] = 255
+        print("Mutiprocessing time: {}secs\n".format((time.process_time()-start)))
 
-        # corp to a smaller region that only cover the current filling region to speed up
-        # todo
+    else:
+        # split each region if it is splited by ink region
+        start = time.process_time()
+        for j in fill_id:
 
-        # assign new id to
-        fill_points += flood_fill_multi(fill_region)
+            # skip strokes
+            if j == 0:
+                continue
+
+            # generate fill mask of that region
+            fill_region = np.full(result.shape, 0, np.uint8)
+            fill_region[np.where(result == j)] = 255
+
+            # corp to a smaller region that only cover the current filling region to speed up
+            # todo
+
+            # assign new id to
+            fill_points += flood_fill_multi(fill_region, verbo=False)
+        print("Single-processing time: {}secs\n".format((time.process_time()-start)))
 
     result = build_fill_map(result, fill_points)
     fill_id_new = np.unique(result)
