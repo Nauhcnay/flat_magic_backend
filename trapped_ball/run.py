@@ -43,7 +43,7 @@ def region_get_map(path_to_png,
         else:
             name = 0
 
-    ret, binary = cv2.threshold(img, 50, 255, cv2.THRESH_BINARY)
+    ret, binary = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
     result = binary # this should be binary numpu array
     
@@ -69,7 +69,7 @@ def region_get_map(path_to_png,
     if line.shape[:2] != binary.shape[:2]:
         line = cv2.resize(line, (binary.shape[1],binary.shape[0]), 
                         interpolation = cv2.INTER_AREA)
-    _, binary_line = cv2.threshold(line, 50, 255, cv2.THRESH_BINARY)
+    _, binary_line = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
 
     assert len(radius_set) == len(percentiles)
 
@@ -309,6 +309,8 @@ def merge_exp(path_line, path_line_sim):
 
 if __name__ == '__main__':
 
+    __spec__ = None
+    
     parser = argparse.ArgumentParser()
     
     parser.add_argument("--single", action = 'store_true', help="process and save a single image to output")
