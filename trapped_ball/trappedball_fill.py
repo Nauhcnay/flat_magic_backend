@@ -3,11 +3,13 @@ import numpy as np
 import pdb
 import pickle
 import time
+import pyximport; pyximport.install()
 # it seemed that multi thread will not help to reduce running time
 # https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
 from multiprocessing import Pool
 from multiprocessing import freeze_support
 from functools import partial
+
 
 
 from tqdm import tqdm
