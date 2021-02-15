@@ -2,6 +2,13 @@ import cv2
 import numpy as np
 import pdb
 import pickle
+import time
+# it seemed that multi thread will not help to reduce running time
+# https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
+from multiprocessing import Pool
+from multiprocessing import freeze_support
+from functools import partial
+
 
 from tqdm import tqdm
 from PIL import Image
@@ -188,7 +195,8 @@ def flood_fill_single(im, seed_point):
     return pass1
 
 
-def flood_fill_multi(image, max_iter=20000):
+def flood_fill_multi(image, max_iter=20000, verbo=True):
+
     """Perform multi flood fill operations until all valid areas are filled.
     This operation will fill all rest areas, which may result large amount of fills.
 
@@ -199,7 +207,8 @@ def flood_fill_multi(image, max_iter=20000):
     # Returns
         an array of fills' points.
     """
-    print('floodfill')
+    if verbo:
+        print('floodfill')
 
     unfill_area = image
     filled_area = []
@@ -569,6 +578,10 @@ def extract_region():
 
 def to_graph(fillmap, fillid):
 
+    # how to speed up this part?
+    # use another graph data structure
+    # or maybe use list instead of dict
+
     fills = {}
     for j in tqdm(fillid):
         
@@ -679,30 +692,60 @@ def graph_self_check(fill_graph):
                         print("Log:\tfind missing neighbor")
             # print("Log:\tregion %d has %d points"%(key, fill_graph[key]['area']))  
 
-def split_region(result):
+def flood_fill_single_proc(region_id, img):
     
+    # construct fill region
+    fill_region = np.full(img.shape, 0, np.uint8)
+    fill_region[np.where(img == region_id)] = 255
+    return flood_fill_multi(fill_region, verbo=False)
+
+def flood_fill_multi_proc(func, fill_id, result, n_proc):
+    print("Log:\tmulti process spliting bleeding regions")
+    with Pool(processes=n_proc) as p:
+        return p.map(partial(func, img=result), fill_id)
+
+def split_region(result, multi_proc=True):
+    
+    # this function could be parallel
+    # todo
+
     # get list of fill id
-    fill_id = np.unique(result.flatten())
-    fill_id_new = list(np.unique(result.flatten()).copy())
-    next_id = fill_id.max() + 1
-
-    # split each region if it is splited by ink region
+    fill_id = np.unique(result.flatten()).tolist()
+    fill_id.remove(0)
+    assert 0 not in fill_id
+    
     fill_points = []
-    for j in fill_id:
 
-        # skip strokes
-        if j == 0:
-            continue
+    # get each region ready to be filled
+    if multi_proc:
+        n_proc = 8
+        start = time.process_time()
+        
+        fill_points_multi_proc = flood_fill_multi_proc(flood_fill_single_proc, fill_id, result, n_proc)
+        for f in fill_points_multi_proc:
+            fill_points += f
 
-        # generate fill mask of that region
-        fill_region = np.full(result.shape, 0, np.uint8)
-        fill_region[np.where(result == j)] = 255
+        print("Mutiprocessing time: {}secs\n".format((time.process_time()-start)))
 
-        # corp to the region to speed up
-        # todo
+    else:
+        # split each region if it is splited by ink region
+        start = time.process_time()
+        for j in fill_id:
 
-        # assign new id to
-        fill_points += flood_fill_multi(fill_region)
+            # skip strokes
+            if j == 0:
+                continue
+
+            # generate fill mask of that region
+            fill_region = np.full(result.shape, 0, np.uint8)
+            fill_region[np.where(result == j)] = 255
+
+            # corp to a smaller region that only cover the current filling region to speed up
+            # todo
+
+            # assign new id to
+            fill_points += flood_fill_multi(fill_region, verbo=False)
+        print("Single-processing time: {}secs\n".format((time.process_time()-start)))
 
     result = build_fill_map(result, fill_points)
     fill_id_new = np.unique(result)
@@ -841,7 +884,7 @@ def remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th):
     return fills_graph
 
 
-def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True):
+def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=False):
     
     """
     next step should be using multi threading in each step
@@ -853,6 +896,8 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True)
     low_th = int(max_height*max_width*low_th)
     max_th = int(max_height*max_width*max_th)
 
+    # 1. convert filling map to graphs
+    # this step take 99% of running time, need optimaization a lot
     if debug:
         print("Log:\tload fill_map.pickle")
         result = load_obj("fill_map.pickle")
@@ -878,14 +923,17 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=True)
         print("Log:\tfind region neighbors")
         fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
 
+    # self check if the graph is constructed correctly 
     graph_self_check(fills_graph)              
 
-    # merge all small region to its largest neighbor
-    
+    # 2. merge all small region to its largest neighbor
+    # this step seems fast, it only takes around 20s to finish
+    print("Log:\tremove leaking color")
     fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
     
+    # 3. show the refined the result
     visualize_graph(fills_graph, result, region=None)
-    # map region graph back to fillmaps
+    
+    # 4. map region graph back to fillmaps
     result = to_fillmap(result, fills_graph)
-
     return result, fills_graph

@@ -252,9 +252,9 @@ def debug():
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
     parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/CP_epoch2501.pth")
     parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/CP_epoch5001.pth")
-    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/")
+    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/CP_epoch1801.pth")
     parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
-    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/")
+    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch501.pth")
     args = parser.parse_args()
 
     # initailize

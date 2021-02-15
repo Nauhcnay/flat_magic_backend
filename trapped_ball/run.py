@@ -43,7 +43,7 @@ def region_get_map(path_to_png,
         else:
             name = 0
 
-    ret, binary = cv2.threshold(img, 50, 255, cv2.THRESH_BINARY)
+    ret, binary = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
     result = binary # this should be binary numpu array
     
@@ -69,8 +69,7 @@ def region_get_map(path_to_png,
     if line.shape[:2] != binary.shape[:2]:
         line = cv2.resize(line, (binary.shape[1],binary.shape[0]), 
                         interpolation = cv2.INTER_AREA)
-    _, binary_line = cv2.threshold(line, 50, 255, cv2.THRESH_BINARY)
-
+    _, binary_line = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
     assert len(radius_set) == len(percentiles)
 
     for i in range(len(radius_set)):
@@ -278,7 +277,7 @@ def merge_exp(path_line, path_line_sim):
     line_full = line
 
     fillmap_full[np.where(line_full<220)] = 0
-    fillmap_full = merger_fill_2nd(fillmap_full)
+    fillmap_full = merger_fill_2nd(fillmap_full)[0]
     fillmap_full = thinning(fillmap_full)
 
     '''
@@ -309,6 +308,8 @@ def merge_exp(path_line, path_line_sim):
 
 if __name__ == '__main__':
 
+    __spec__ = None
+    
     parser = argparse.ArgumentParser()
     
     parser.add_argument("--single", action = 'store_true', help="process and save a single image to output")
@@ -338,8 +339,8 @@ if __name__ == '__main__':
         radius_percentile_explor_repeat(radius_set2, args.input, "./exp3")
     elif args.exp4:
         # let's test 2 pass merge
-        line = "line.png"
-        line_sim = "line_simplify.png"
+        line = "./examples/line.png"
+        line_sim = "./examples/line_simplify.png"
         merge_exp(line, line_sim)
     else:
         in_path = "./flatting/size_2048/line_detection_croped"
