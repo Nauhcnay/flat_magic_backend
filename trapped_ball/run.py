@@ -147,6 +147,7 @@ def region_get_map(path_to_png,
     # line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
 
     # fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
+    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
     # fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
