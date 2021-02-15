@@ -277,9 +277,10 @@ def merge_exp(path_line, path_line_sim):
     # line_full =  cv2.bitwise_and(line, line_sim_scaled)
     line_full = line
 
-    fillmap_full[np.where(line_full<220)] = 0
+    # fillmap_full[np.where(line_full<220)] = 0
+    fillmap_full[line_full<220] = 0
     fillmap_full = merger_fill_2nd(fillmap_full)[0]
-    fillmap_full = thinning(fillmap_full)
+    # fillmap_full = thinning(fillmap_full)
 
     '''
     save results

@@ -678,6 +678,15 @@ def visualize_graph(fills_graph, result, region=None):
         show_map[fills_graph[region]['point']] = 255
         Image.fromarray(show_map).show()
 
+def visualize_result(result, region=None):
+    if region == None:
+        Image.fromarray(show_fill_map(result).astype(np.uint8)).show()
+    else:
+        assert region in result
+        show_map = np.zeros(result.shape, np.uint8)
+        show_map[np.where(result == region)] = 255
+        Image.fromarray(show_map).show()
+
 def graph_self_check(fill_graph):
 
     for key in fill_graph:
@@ -702,50 +711,18 @@ def flood_fill_multi_proc(func, fill_id, result, n_proc):
     with Pool(processes=n_proc) as p:
         return p.map(partial(func, img=result), fill_id)
 
-def split_region(result, multi_proc=True):
-    
-    # this function could be parallel
-    # todo
+def split_region(result, multi_proc=False):
 
     # get list of fill id
     fill_id = np.unique(result.flatten()).tolist()
     fill_id.remove(0)
     assert 0 not in fill_id
+
+    _, result = cv2.connectedComponents(result)
+    # there will left some small regions, we can merge them into region 0 in the following step
+
+    # result = build_fill_map(result, fill_points)
     
-    fill_points = []
-
-    # get each region ready to be filled
-    if multi_proc:
-        n_proc = 8
-        start = time.process_time()
-        
-        fill_points_multi_proc = flood_fill_multi_proc(flood_fill_single_proc, fill_id, result, n_proc)
-        for f in fill_points_multi_proc:
-            fill_points += f
-
-        print("Mutiprocessing time: {}secs\n".format((time.process_time()-start)))
-
-    else:
-        # split each region if it is splited by ink region
-        start = time.process_time()
-        for j in fill_id:
-
-            # skip strokes
-            if j == 0:
-                continue
-
-            # generate fill mask of that region
-            fill_region = np.full(result.shape, 0, np.uint8)
-            fill_region[np.where(result == j)] = 255
-
-            # corp to a smaller region that only cover the current filling region to speed up
-            # todo
-
-            # assign new id to
-            fill_points += flood_fill_multi(fill_region, verbo=False)
-        print("Single-processing time: {}secs\n".format((time.process_time()-start)))
-
-    result = build_fill_map(result, fill_points)
     fill_id_new = np.unique(result)
 
     return result, fill_id_new
