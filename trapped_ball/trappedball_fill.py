@@ -111,7 +111,7 @@ def trapped_ball_fill_single(image, seed_point, radius):
     return pass2
 
 
-def trapped_ball_fill_multi(image, radius, percentile='mean', max_iter=1000):
+def trapped_ball_fill_multi(image, radius, percentile='mean', max_iter=1000, verbo=False):
     """Perform multi trapped ball fill operations until all valid areas are filled.
 
     # Arguments
@@ -124,7 +124,8 @@ def trapped_ball_fill_multi(image, radius, percentile='mean', max_iter=1000):
     # Returns
         an array of fills' points.
     """
-    print('trapped-ball ' + str(radius))
+    if verbo:
+        print('trapped-ball ' + str(radius))
 
     unfill_area = image # so unfill_area is the binary numpy array (but contain 0, 255 only), 0 means filled region I guess
     
@@ -195,7 +196,7 @@ def flood_fill_single(im, seed_point):
     return pass1
 
 
-def flood_fill_multi(image, max_iter=20000, verbo=True):
+def flood_fill_multi(image, max_iter=20000, verbo=False):
 
     """Perform multi flood fill operations until all valid areas are filled.
     This operation will fill all rest areas, which may result large amount of fills.
@@ -361,7 +362,7 @@ def get_border_point(points, rect, max_height, max_width):
     return border_pixel_points, approx_shape
 
 
-def merge_fill(fillmap, max_iter=10):
+def merge_fill(fillmap, max_iter=10, verbo=False):
     """Merge fill areas.
 
     # Arguments
@@ -374,7 +375,8 @@ def merge_fill(fillmap, max_iter=10):
     result = fillmap.copy()
 
     for i in range(max_iter):
-        print('merge ' + str(i + 1))
+        if verbo:
+            print('merge ' + str(i + 1))
 
         # set stroke as black
         result[np.where(fillmap == 0)] = 0
@@ -803,7 +805,7 @@ def remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th):
     really_low_th = 100
     # max region absorb small neighbors
     for i in range(max_iter):
-        print('merge 2nd ' + str(i + 1))    
+        # print('merge 2nd ' + str(i + 1))    
         for j in tqdm(fill_id_new):
             if j == 0:
                 continue

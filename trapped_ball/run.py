@@ -43,9 +43,10 @@ def region_get_map(path_to_png,
         else:
             name = 0
 
-    ret, binary = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
+    print("Log:\ttrapped ball filling")
+    ret, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
-    result = binary # this should be binary numpu array
+    result = line_simplify # this should be line_simplify numpu array
     
     if path_to_line == None and type(path_to_png) == str:
         path_to_line = path_to_png.replace("_detection", "")
@@ -66,10 +67,10 @@ def region_get_map(path_to_png,
         line = line_org
 
     # may be resize the original line is not a good idea
-    if line.shape[:2] != binary.shape[:2]:
-        line = cv2.resize(line, (binary.shape[1],binary.shape[0]), 
+    if line.shape[:2] != line_simplify.shape[:2]:
+        line = cv2.resize(line, (line_simplify.shape[1],line_simplify.shape[0]), 
                         interpolation = cv2.INTER_AREA)
-    _, binary_line = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
+    _, line_artist = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
     assert len(radius_set) == len(percentiles)
 
     for i in range(len(radius_set)):
@@ -86,52 +87,60 @@ def region_get_map(path_to_png,
 
     # give each region a identify number
     # could we do something to imporve the fill map?
-    fillmap = build_fill_map(result, fills)
+    fillmap_neural = build_fill_map(result, fills)
     if visualize_steps:
         i+=1
-        cv2.imwrite("%d.final_fills.png"%i, show_fill_map(fillmap))
+        cv2.imwrite("%d.final_fills.png"%i, show_fill_map(fillmap_neural))
     
     # merge small pieces into large region, but what is the mergeing stradegy?
-    fillmap = merge_fill(fillmap)
+    fillmap_neural = merge_fill(fillmap_neural)
     if visualize_steps:
         i+=1
-        cv2.imwrite("%d.merged.png"%i, show_fill_map(fillmap))
-    fillmap = thinning(fillmap)
+        cv2.imwrite("%d.merged.png"%i, show_fill_map(fillmap_neural))
+    fillmap_neural = thinning(fillmap_neural)
     
     if visualize_steps:
         i+=1
-        cv2.imwrite("%d.fills_final.png"%i, show_fill_map(fillmap))
-    
-    fill_rescale = show_fill_map(fillmap)
-    
-    fillmap[np.where(binary == 0)]=0
-    fill_pred = show_fill_map(fillmap)
+        cv2.imwrite("%d.fills_final.png"%i, show_fill_map(fillmap_neural))
 
-    fillmap[np.where(binary_line == 0)]=0
-    fill_line = show_fill_map(fillmap)
+    fillmap_neural_fullsize = cv2.resize(fillmap_neural.astype(np.uint8), 
+                                (line_org.shape[1], line_org.shape[0]), 
+                                interpolation = cv2.INTER_NEAREST)
 
-    fill_org = cv2.resize(fill_rescale.astype(np.uint8), 
-                        (line_org.shape[1], line_org.shape[0]), 
-                        interpolation = cv2.INTER_NEAREST)
-    fill_org[np.where(line_org<125)]=0
+    # version1, pure filling result
+    fill_neural = show_fill_map(fillmap_neural)
+
+    # version2, filling result overlay simpified line
+    fillmap_neural[np.where(line_simplify == 0)]=0
+    fill_neural_line = show_fill_map(fillmap_neural)
+
+    # version3, filling result overlay down scaled artist line
+    fillmap_neural[np.where(line_artist == 0)]=0
+    fill_artist_line = show_fill_map(fillmap_neural)
+
+    # version4, up scaled filling result overlay full size artist line
+    fillmap_neural_fullsize[np.where(line_artist==0)]=0
+    fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
+    fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
 
     if output_png is not None:
 
         print("Log:\tsave at %s"%os.path.join(output_png, str(name)+"_fill.png"))        
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill.png"), fill_rescale)
+        cv2.imwrite(os.path.join(output_png, str(name)+"_fill.png"), fill_neural)
         
-        fillmap[np.where(binary == 0)]=0
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_edge.png"), fill_pred)
+        fillmap_neural[np.where(line_simplify == 0)]=0
+        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_edge.png"), fill_neural_line)
 
-        fillmap[np.where(binary_line == 0)]=0
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line.png"), fill_line)
+        fillmap_neural[np.where(line_artist == 0)]=0
+        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line.png"), fill_artist_line)
 
         if save_org_size:
-            cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line_full.png"), fill_org)
+            cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line_full.png"), fill_neural_fullsize)
+    
     if return_numpy:
-        return fill_rescale, fill_pred, fill_org
+        return fill_neural, fill_neural_line, fill_neural_fullsize
     else:
-        return fillmap
+        return fillmap_neural
 
 def show_region(region_bit):
     plt.imshow(show_fill_map(region_bit))
@@ -233,7 +242,7 @@ def radius_percentile_explor_repeat(radius_set, input, output, percentile_set = 
                 cv2.imwrite(outpath, out_map)
                 result = mark_fill(result, fill)
 
-def merge_exp(path_line, path_line_sim):
+def trappedball_2pass_exp(path_line, path_line_sim, save_file=False):
     
     # open image
     line = cv2.imread(path_line, cv2.IMREAD_COLOR)
@@ -284,29 +293,30 @@ def merge_exp(path_line, path_line_sim):
     '''
     save results
     '''
+    if save_file:
+        # show fill map
+        fill_scaled = show_fill_map(fillmap)
+        fill_scaled_v1 = show_fill_map(fillmap_full)
+        fill_full = cv2.resize(fill_scaled.astype(np.uint8), 
+                            (line.shape[1], line.shape[0]), 
+                            interpolation = cv2.INTER_NEAREST)
+        line_scaled = cv2.resize(line.astype(np.uint8), 
+                            (line_sim.shape[1], line_sim.shape[0]), 
+                            interpolation = cv2.INTER_NEAREST)
+        
+        # overlay strokes
+        fill_scaled[np.where(line_scaled<220)] = 0
+        fill_scaled_v1[np.where(line<220)] = 0
+        fill_full[np.where(line<220)]=0
 
-    # show fill map
-    fill_scaled = show_fill_map(fillmap)
-    fill_scaled_v1 = show_fill_map(fillmap_full)
-    fill_full = cv2.resize(fill_scaled.astype(np.uint8), 
-                        (line.shape[1], line.shape[0]), 
-                        interpolation = cv2.INTER_NEAREST)
-    line_scaled = cv2.resize(line.astype(np.uint8), 
-                        (line_sim.shape[1], line_sim.shape[0]), 
-                        interpolation = cv2.INTER_NEAREST)
-    
-    # overlay strokes
-    fill_scaled[np.where(line_scaled<220)] = 0
-    fill_scaled_v1[np.where(line<220)] = 0
-    fill_full[np.where(line<220)]=0
+        
 
-    
+        # save result
+        cv2.imwrite("fill_sacled.png", fill_scaled)
+        cv2.imwrite("fill_scaled_v1.png", fill_scaled_v1)
+        cv2.imwrite("fill_full.png", fill_full)
 
-    # save result
-    cv2.imwrite("fill_sacled.png", fill_scaled)
-    cv2.imwrite("fill_scaled_v1.png", fill_scaled_v1)
-    cv2.imwrite("fill_full.png", fill_full)
-
+    return fillmap_full
 if __name__ == '__main__':
 
     __spec__ = None
@@ -342,7 +352,7 @@ if __name__ == '__main__':
         # let's test 2 pass merge
         line = "./examples/line.png"
         line_sim = "./examples/line_simplify.png"
-        merge_exp(line, line_sim)
+        trappedball_2pass_exp(line, line_sim)
     else:
         in_path = "./flatting/size_2048/line_detection_croped"
         out_path = "./exp4"
