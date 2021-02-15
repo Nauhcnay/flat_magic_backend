@@ -10,7 +10,6 @@ test = "L:\\2.Research_project\\3.flatting\\flatting_trapped_ball\\flatting\\siz
 
 line_croped = "L:\\2.Research_project\\3.flatting\\flatting_trapped_ball\\flatting\\size_1024\\line_croped"
 line_detection_croped = "L:\\2.Research_project\\3.flatting\\flatting_trapped_ball\\flatting\\size_1024\\line_detection_croped"
-
 # with open("moving log.txt", "r") as f:
 #     move_list = f.readlines()
 

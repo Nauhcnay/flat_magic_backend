@@ -79,7 +79,7 @@ def main():
     path_root = "../flatting"
     org = "size_org"
     
-    crop_size = 256
+    crop_size = 1024
     size = "size_%d"%crop_size
 
     path_to_img = join(path_root, org, "line")

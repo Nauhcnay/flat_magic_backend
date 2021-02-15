@@ -9,6 +9,7 @@ from multiprocessing import Pool
 from multiprocessing import freeze_support
 from functools import partial
 
+
 from tqdm import tqdm
 from PIL import Image
 
@@ -195,6 +196,7 @@ def flood_fill_single(im, seed_point):
 
 
 def flood_fill_multi(image, max_iter=20000, verbo=True):
+
     """Perform multi flood fill operations until all valid areas are filled.
     This operation will fill all rest areas, which may result large amount of fills.
 

@@ -70,7 +70,6 @@ def region_get_map(path_to_png,
         line = cv2.resize(line, (binary.shape[1],binary.shape[0]), 
                         interpolation = cv2.INTER_AREA)
     _, binary_line = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
-
     assert len(radius_set) == len(percentiles)
 
     for i in range(len(radius_set)):
