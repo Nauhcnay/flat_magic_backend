@@ -139,14 +139,14 @@ def region_get_map(path_to_png,
     fill_artist_line = show_fill_map(fillmap_neural)
 
     # version4, up scaled filling result overlay full size artist line
-    line_simplify_fullsize = cv2.resize(line_simplify.astype(np.uint8), 
-                                (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
-                                interpolation = cv2.INTER_NEAREST)
+    # line_simplify_fullsize = cv2.resize(line_simplify.astype(np.uint8), 
+    #                             (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
+    #                             interpolation = cv2.INTER_NEAREST)
     # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
-    print("Log:\textracting skeletion")
-    line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
+    # print("Log:\textracting skeletion")
+    # line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
 
-    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
+    # fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
     # fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)

@@ -4,6 +4,7 @@ import pdb
 import pickle
 import time
 import pyximport; pyximport.install()
+import adjacency_matrix
 # it seemed that multi thread will not help to reduce running time
 # https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
 from multiprocessing import Pool
@@ -724,7 +725,7 @@ def split_region(result, multi_proc=False):
     fill_id.remove(0)
     assert 0 not in fill_id
 
-    _, result = cv2.connectedComponents(result)
+    _, result = cv2.connectedComponents(result, connectivity=4)
     # there will left some small regions, we can merge them into region 0 in the following step
 
     # result = build_fill_map(result, fill_points)
@@ -887,34 +888,36 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=False
         print("Log:\tsplit bleeding regions")
         result, fill_id_new = split_region(result)
     
-    # initailize the graph of regions
-    if debug:
-        print("Log:\tload fills_graph.pickle")
-        fills_graph_init = load_obj("fills_graph.pickle")
-        fills_graph = load_obj("fills_graph.pickle")
-    else:
-        print("Log:\tinitialize region graph")
-        fills_graph = to_graph(result, fill_id_new)
+    return result, None
 
-    # find neighbor
-    if debug:
-        print("Log:\tload fills_graph_n.pickle")
-        fills_graph = load_obj("fills_graph_n.pickle")
-    else:
-        print("Log:\tfind region neighbors")
-        fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
+    # # initailize the graph of regions
+    # if debug:
+    #     print("Log:\tload fills_graph.pickle")
+    #     fills_graph_init = load_obj("fills_graph.pickle")
+    #     fills_graph = load_obj("fills_graph.pickle")
+    # else:
+    #     print("Log:\tinitialize region graph")
+    #     fills_graph = to_graph(result, fill_id_new)
 
-    # self check if the graph is constructed correctly 
-    graph_self_check(fills_graph)              
+    # # find neighbor
+    # if debug:
+    #     print("Log:\tload fills_graph_n.pickle")
+    #     fills_graph = load_obj("fills_graph_n.pickle")
+    # else:
+    #     print("Log:\tfind region neighbors")
+    #     fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
 
-    # 2. merge all small region to its largest neighbor
-    # this step seems fast, it only takes around 20s to finish
-    print("Log:\tremove leaking color")
-    fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
+    # # self check if the graph is constructed correctly 
+    # graph_self_check(fills_graph)              
+
+    # # 2. merge all small region to its largest neighbor
+    # # this step seems fast, it only takes around 20s to finish
+    # print("Log:\tremove leaking color")
+    # fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
     
-    # 3. show the refined the result
-    visualize_graph(fills_graph, result, region=None)
+    # # 3. show the refined the result
+    # visualize_graph(fills_graph, result, region=None)
     
-    # 4. map region graph back to fillmaps
-    result = to_fillmap(result, fills_graph)
-    return result, fills_graph
+    # # 4. map region graph back to fillmaps
+    # result = to_fillmap(result, fills_graph)
+    # return result, fills_graph

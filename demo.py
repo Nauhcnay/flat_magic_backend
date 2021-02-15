@@ -268,9 +268,9 @@ def debug():
     
   
     
-    img = Image.open("./flatting/validation/0120.png").convert("L")
-    pred_and_fill(img, radius=1, op='256', size=256, patch="False", nets=nets, outputs="./flatting/gradio")
+    img = Image.open("./flatting/validation/train_008.png").convert("L")
+    pred_and_fill(img, radius=1, op='1024_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    main()
-    # debug()
+    # main()
+    debug()
