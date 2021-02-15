@@ -12,6 +12,26 @@ import numpy as np
 
 from os.path import *
 
+def extract_skeleton(img):
+
+    size = np.size(img)
+    skel = np.zeros(img.shape,np.uint8)
+    element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+    done = False
+     
+    while done is False:
+        eroded = cv2.erode(img,element)
+        temp = cv2.dilate(eroded,element)
+        temp = cv2.subtract(img,temp)
+        skel = cv2.bitwise_or(skel,temp)
+        img = eroded.copy()
+     
+        zeros = size - cv2.countNonZero(img)
+        if zeros==size:
+            done = True
+
+    return skel
+
 def region_get_map(path_to_png, 
                 output_png=None, 
                 radius_set=[3,2,1],
@@ -123,7 +143,9 @@ def region_get_map(path_to_png,
                                 (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
                                 interpolation = cv2.INTER_NEAREST)
     # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
-    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 0)]=0
+    line_simplify_fullsize = extract_skeleton(255 - line_simplify_fullsize)
+
+    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
     # fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
