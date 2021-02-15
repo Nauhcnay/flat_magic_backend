@@ -44,7 +44,7 @@ def region_get_map(path_to_png,
             name = 0
 
     print("Log:\ttrapped ball filling")
-    ret, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
+    _, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
     result = line_simplify # this should be line_simplify numpu array
     
@@ -119,9 +119,15 @@ def region_get_map(path_to_png,
     fill_artist_line = show_fill_map(fillmap_neural)
 
     # version4, up scaled filling result overlay full size artist line
-    fillmap_neural_fullsize[np.where(line_artist_fullsize < 125)]=0
+    line_simplify_fullsize = cv2.resize(line_simplify.astype(np.uint8), 
+                                (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
+                                interpolation = cv2.INTER_NEAREST)
+    # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
+    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 0)]=0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
+    fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
+    fill_neural_fullsize[line_artist_fullsize < 125] == 0
 
     if output_png is not None:
 

@@ -272,7 +272,7 @@ def show_fill_map(fillmap):
         an image.
     """
     # Generate color for each fill randomly.
-    colors = np.random.randint(0, 255, (np.max(fillmap) + 1, 3))
+    colors = np.random.randint(0, 255, (np.max(fillmap) + 1, 3), dtype=np.uint8) 
     # Id of line is 0, and its color is black.
     colors[0] = [0, 0, 0]
 
