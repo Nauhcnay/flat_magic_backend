@@ -1,8 +1,7 @@
 
 from trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
 from thinning import thinning
-from thinning_zhang import zhangSuen
-
+from skimage.morphology import skeletonize
 from PIL import Image
 
 import argparse
@@ -145,7 +144,7 @@ def region_get_map(path_to_png,
                                 interpolation = cv2.INTER_NEAREST)
     # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
     print("Log:\textracting skeletion")
-    line_simplify_fullsize = zhangSuen(255 - line_simplify_fullsize)
+    line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
 
     fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
