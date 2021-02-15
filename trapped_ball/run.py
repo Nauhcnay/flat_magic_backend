@@ -144,6 +144,7 @@ def region_get_map(path_to_png,
                                 (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
                                 interpolation = cv2.INTER_NEAREST)
     # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
+    print("Log:\textracting skeletion")
     line_simplify_fullsize = zhangSuen(255 - line_simplify_fullsize)
 
     fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
