@@ -54,17 +54,17 @@ def region_get_map(path_to_png,
     if type(path_to_line) == str:
         assert exists(path_to_line)
         print("Log:\topen %s"%path_to_line)
-        line_org = cv2.imread(path_to_line, cv2.IMREAD_COLOR)
+        line_artist_fullsize = cv2.imread(path_to_line, cv2.IMREAD_COLOR)
         
     elif path_to_line != None:
-        line_org = np.array(path_to_line)
+        line_artist_fullsize = np.array(path_to_line)
     else:
-        line_org = img
+        line_artist_fullsize = img
 
-    if len(line_org.shape) == 3:
-        line = cv2.cvtColor(line_org, cv2.COLOR_BGR2GRAY)
+    if len(line_artist_fullsize.shape) == 3:
+        line = cv2.cvtColor(line_artist_fullsize, cv2.COLOR_BGR2GRAY)
     else:
-        line = line_org
+        line = line_artist_fullsize
 
     # may be resize the original line is not a good idea
     if line.shape[:2] != line_simplify.shape[:2]:
@@ -104,7 +104,7 @@ def region_get_map(path_to_png,
         cv2.imwrite("%d.fills_final.png"%i, show_fill_map(fillmap_neural))
 
     fillmap_neural_fullsize = cv2.resize(fillmap_neural.astype(np.uint8), 
-                                (line_org.shape[1], line_org.shape[0]), 
+                                (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
                                 interpolation = cv2.INTER_NEAREST)
 
     # version1, pure filling result
@@ -119,7 +119,7 @@ def region_get_map(path_to_png,
     fill_artist_line = show_fill_map(fillmap_neural)
 
     # version4, up scaled filling result overlay full size artist line
-    fillmap_neural_fullsize[np.where(line_artist==0)]=0
+    fillmap_neural_fullsize[np.where(line_artist_fullsize < 125)]=0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
 
@@ -127,11 +127,7 @@ def region_get_map(path_to_png,
 
         print("Log:\tsave at %s"%os.path.join(output_png, str(name)+"_fill.png"))        
         cv2.imwrite(os.path.join(output_png, str(name)+"_fill.png"), fill_neural)
-        
-        fillmap_neural[np.where(line_simplify == 0)]=0
         cv2.imwrite(os.path.join(output_png, str(name)+"_fill_edge.png"), fill_neural_line)
-
-        fillmap_neural[np.where(line_artist == 0)]=0
         cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line.png"), fill_artist_line)
 
         if save_org_size:
