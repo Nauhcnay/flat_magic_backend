@@ -10,7 +10,7 @@ import adjacency_matrix
 from multiprocessing import Pool
 from multiprocessing import freeze_support
 from functools import partial
-from skimage.morphology import skeletonize
+from skimage.morphology import skeletonize, thin
 
 
 
@@ -59,7 +59,7 @@ def extract_line(fills_result):
     edges = cv2.Canny(img, min_val, max_val, L2gradient=True)
     return 255-edges
 
-def to_masked_line(line_sim, line_artist, rk1=None, rk2=None, ak=None, connect=None):
+def to_masked_line(line_sim, line_artist, rk1=None, rk2=None, ak=None, tn=1):
     '''
     Given:
         line_sim, simplified line, which is also the neural networks output
@@ -86,7 +86,12 @@ def to_masked_line(line_sim, line_artist, rk1=None, rk2=None, ak=None, connect=N
         mask_add = cv2.morphologyEx(line_sim, cv2.MORPH_DILATE, kernel_add)
     else:
         mask_add = line_sim
-    mask_add = 255 - skeletonize((255 - mask_add)/255, method='lee')
+
+    # may be we don't need that skeleton
+    # mask_add = 255 - skeletonize((255 - mask_add)/255, method='lee')
+    
+    # let's try just thin it
+    mask_add = 255 - thin(255 - mask_add, max_iter=tn).astype(np.uint8)*255
 
     if rk2 != None:
         kernel_remove2 = get_ball_structuring_element(rk2)
@@ -96,11 +101,11 @@ def to_masked_line(line_sim, line_artist, rk1=None, rk2=None, ak=None, connect=N
     # 3. combine and return the result
     mask = np.logical_or(mask_remove, mask_add).astype(np.uint8)*255
 
-    # 4. connect dot lines if exists
-    if connect != None:
-        kernel_con = get_ball_structuring_element(1)
-        for _ in range(connect):
-            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_con)
+    # # 4. connect dot lines if exists
+    # if connect != None:
+    #     kernel_con = get_ball_structuring_element(1)
+    #     for _ in range(connect):
+    #         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_con)
 
     return 255 - mask
 
@@ -796,16 +801,80 @@ def flood_fill_multi_proc(func, fill_id, result, n_proc):
 
 def split_region(result, multi_proc=False):
 
+    # # get list of fill id
+    # fill_id = np.unique(result.flatten()).tolist()
+    # fill_id.remove(0)
+    # assert 0 not in fill_id
+
+    # _, result = cv2.connectedComponents(result, connectivity=4)
+    # # there will left some small regions, we can merge them into region 0 in the following step
+
+    # # result = build_fill_map(result, fill_points)
+    
+    # fill_id_new = np.unique(result)
+
+    # generate thershold of merging region
+    w, h = result.shape
+    th = int(w*h*0.09)
     # get list of fill id
     fill_id = np.unique(result.flatten()).tolist()
     fill_id.remove(0)
     assert 0 not in fill_id
-
-    _, result = cv2.connectedComponents(result, connectivity=4)
-    # there will left some small regions, we can merge them into region 0 in the following step
-
-    # result = build_fill_map(result, fill_points)
     
+    fill_points = []
+
+    # get each region ready to be filled
+    if multi_proc:
+        n_proc = 8
+        start = time.process_time()
+        
+        fill_points_multi_proc = flood_fill_multi_proc(flood_fill_single_proc, fill_id, result, n_proc)
+        for f in fill_points_multi_proc:
+            fill_points += f
+
+        print("Mutiprocessing time: {}secs\n".format((time.process_time()-start)))
+
+    else:
+        # split each region if it is splited by ink region
+        start = time.process_time()
+        for j in tqdm(fill_id):
+
+            # skip strokes
+            if j == 0:
+                continue
+
+            # generate fill mask of that region
+            fill_region = np.full(result.shape, 0, np.uint8)
+            fill_region[np.where(result == j)] = 255
+
+            # corp to a smaller region that only cover the current filling region to speed up
+            # todo
+
+            # assign new id to
+            fills = flood_fill_multi(fill_region, verbo=False)
+
+            merge = []
+            merge_idx = [] 
+            for i in range(len(fills)):
+                if len(fills[i][0]) > th:
+                    merge_idx.append(i)
+
+            for i in range(len(merge_idx)):
+                merge.append(fills[merge_idx[i]])
+
+            for i in merge_idx:
+                fills.pop(i)
+
+            if len(merge) > 0:
+                region_merged = merge.pop(0)
+                for p in merge:
+                    region_merged = (np.concatenate((region_merged[0], p[0])), np.concatenate((region_merged[1], p[1])))
+                fills.append(region_merged)
+            
+            fill_points += fills
+        print("Single-processing time: {}secs\n".format((time.process_time()-start)))
+
+    result = build_fill_map(result, fill_points)
     fill_id_new = np.unique(result)
 
     return result, fill_id_new
@@ -895,7 +964,6 @@ def remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th):
 
             min_neighbors, min_neighbor_sizes = find_min_neighbor(fills_graph, j)
             # print("Log:\tfound region %d have %d neighbors"%(j, len(min_neighbors)))
-            
             
             for k in min_neighbors:
                 

@@ -4,6 +4,7 @@ from trappedball_fill import get_ball_structuring_element, extract_line, to_mask
 from thinning import thinning
 from skimage.morphology import skeletonize
 from PIL import Image
+from tqdm import tqdm
 
 import argparse
 import cv2
@@ -12,6 +13,10 @@ import os
 import numpy as np
 
 from os.path import *
+
+# use cython adjacency matrix
+import pyximport; pyximport.install()
+import adjacency_matrix
 
 def extract_skeleton(img):
 
@@ -32,6 +37,43 @@ def extract_skeleton(img):
             done = True
 
     return skel
+
+def generate_masked_line(line_simplify, line_artist, line_artist_fullsize):
+        line_masked = to_masked_line(line_simplify, line_artist, rk1=1, rk2=1, tn=1)
+
+        # remove isolate points
+        # it is not safe to do that at down scaled size
+        # _, result = cv2.connectedComponents(255 - line_masked, connectivity=8)
+
+        # up scale masked line to full size
+        line_masked_fullsize_t = cv2.resize(line_masked.astype(np.uint8), 
+                                (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
+                                interpolation = cv2.INTER_NEAREST)
+
+        # maske with fullsize artist line again
+        line_masked_fullsize = to_masked_line(line_masked_fullsize_t, line_artist_fullsize, rk1=7, rk2=1, tn=2)
+
+        # remove isolate points
+        _, temp = cv2.connectedComponents(255 - line_masked_fullsize, connectivity=4)
+        
+        def remove_stray_points(fillmap, drop_thres = 32):
+            ids = np.unique(fillmap)
+            result = np.ones(fillmap.shape) * 255
+
+            for i in tqdm(ids):
+                if i == 0: continue
+                if len(np.where(fillmap == i)[0]) < drop_thres:
+                    # set them as background
+                    result[fillmap == i] = 255
+                else:
+                    # set them as line
+                    result[fillmap == i] = 0
+            
+            return result
+
+        line_masked_fullsize = remove_stray_points(temp, 16)
+
+        return line_masked_fullsize
 
 def region_get_map(path_to_png, 
                 output_png=None, 
@@ -142,74 +184,29 @@ def region_get_map(path_to_png,
     fill_artist_line[line_artist == 0] = 0
 
     # version4, up scaled filling result overlay full size artist line
-    # there are two kinds of informations that need to be remained in the similified line
-    # 1. removal lines
-    # 2. adding lines
+    # this could work, but it is non-trivial
+    # line_masked_fullsize = generate_masked_line(line_simplify, line_artist, line_artist_fullsize)
 
-    '''
-    NOT WORK
-    1. extract line from fill map
-    '''
-    # line_simplify_fullsize = cv2.resize(line_simplify.astype(np.uint8), 
-    #                             (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
-    #                             interpolation = cv2.INTER_NEAREST)
-    # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
+    # fillmap_neural_fullsize[line_masked_fullsize < 125] = 0
+    # _, fillmap_neural_fullsize = cv2.connectedComponents(fillmap_neural_fullsize, connectivity=8)
+
+    # version5, correct initail fillmap by maybe sweep line?
+    # let's do it!
+    fillmap_artist_fullsize = np.ones(fillmap_neural_fullsize.shape, dtype=np.uint8) * 255
+    fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
+    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
+
+    print("Log:\trefine filling results")
+
+    # # this also not fully worked
+    # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
     
-    # print("Log:\tmasking artist line")
-    # # upscale line mask to full size
-    # fill_neural_fullsize = show_fill_map(fillmap_neural)
-    # blur = cv2.GaussianBlur(fill_neural_fullsize, (3,3), 0)
-    # fill_neural_fullsize = cv2.addWeighted(blur, 1.5, fill_neural_fullsize, -0.5, 0)
-    # fill_neural_fullsize = cv2.resize(fill_neural_fullsize, 
-    #                             (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
-    #                             interpolation = cv2.INTER_NEAREST)
-    # # extract line form filled result
-    # line_extracted = extract_line(fill_neural_fullsize)
-    # # line_extracted = cv2.Laplacian(fill_neural_fullsize,cv2.CV_64F)
-    # # line_extracted = cv2.Canny(fill_neural_fullsize, 100, 200, L2gradient=True)
-
-    # # use it to generate enhanced line mask
-    # # not need to implement futher, the quality of extracted line is too tortuous to be used
-    
-    '''
-    2. combine and mask lines at donwscaled size
-    '''
-    # get masked line 
-    line_masked = to_masked_line(line_simplify, line_artist, rk1=1, rk2=1)
-
-
-    # up scale masked line to full size
-    line_masked_fullsize_t = cv2.resize(line_masked.astype(np.uint8), 
-                            (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
-                            interpolation = cv2.INTER_NEAREST)
-
-    # maske with fullsize artist line again
-    line_masked_fullsize = to_masked_line(line_masked_fullsize_t, line_artist_fullsize, rk1=2, rk2=2)    
-
-    # mask_add_skle = skeletonize((255 - line_simplify)/255, method='lee')
-
-    
-    # then up-scale to the full size
-    
-    
-
-
-
-
-    # skeleton is not a good idea
-    # line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
-
-    
-    
-    
-    # mask_add_skle = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
-    mask_add = np.logical_and(mask_add_skle==255, np.logical_xor(mask_add_skle==255, line_artist_fullsize==0))
-
-    # line_artist_masked = 
-    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
-    fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
-    fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.001)
+    
+    # convert final result to graph
+    # we have adjacency matrix, we have fillmap, do we really need another graph for it?
+
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     fill_neural_fullsize[line_artist_fullsize < 125] = 0
 
@@ -227,6 +224,145 @@ def region_get_map(path_to_png,
         return fill_neural, fill_neural_line, fill_neural_fullsize
     else:
         return fillmap_neural
+
+def bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th):
+        
+        w, h = fillmap_neural_fullsize.shape
+
+        th = int(w * h * th)    
+
+        num_regions = len(np.unique(fillmap_artist_fullsize))
+        A = adjacency_matrix.adjacency_matrix(fillmap_artist_fullsize.astype(np.int32), num_regions)
+
+        r_idx_neural, r_count_neural = np.unique(fillmap_neural_fullsize, return_counts=True)
+        r_idx_artist, r_count_artist = np.unique(fillmap_artist_fullsize, return_counts=True)
+        
+        def get_size(idx, count, r):
+            assert r in idx
+            assert r != 0
+
+            return count[np.where(idx==r)]
+
+        F = {}
+        for i in range(len(r_idx_artist)):
+            r = r_idx_artist[i]
+
+            if r == 0: continue
+            label_mask = fillmap_artist_fullsize == r
+            idx, count = np.unique(fillmap_neural_fullsize[label_mask], return_counts=True)
+            most_common = idx[np.argmax(count)]
+            F[r] = most_common
+
+        small_regions = r_idx_artist[r_count_artist < th]
+
+        result = np.zeros(fillmap_neural_fullsize.shape, dtype=np.int)
+
+        for r in r_idx_artist:
+            if r == 0: continue
+            label_mask = fillmap_artist_fullsize == r
+            result[label_mask] = F[r]
+
+        # this may not be neccessary for result, but is necessary for further editing
+        # todo
+        # for s in small_regions:
+        #     label_mask = fillmap_artist_fullsize == s
+        #     neighbors = np.where(A[s,:] == 1)[0]
+            
+        #     # remove line regions, we don't need to consider that
+        #     neighbors = neighbors[np.where(neighbors != 0)]
+
+        #     if len(neighbors) == 0: continue
+            
+        #     sizes = np.array([get_size(r_idx_artist, r_count_artist, n) for n in neighbors])
+
+        #     if neighbors[np.argsort(sizes)[-1]] == 0 and len(neighbors) > 1:
+        #         max_neighbor = neighbors[np.argsort(sizes)[-2]]
+
+        #     elif len(neighbors) > 1:
+        #         max_neighbor = neighbors[np.argsort(sizes)[-1]]
+
+        #     else:
+        #         continue
+            
+        #     result[label_mask] = max_neighbor
+
+        return result
+
+def sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th, keep_th):
+        
+        assert fillmap_neural_fullsize.shape == fillmap_artist_fullsize.shape
+
+        result = np.zeros(fillmap_neural_fullsize.shape)
+
+        def to_sweep_list(fillmap):
+            sweep_dict = {}
+            sweep_ml = [] # most left position, which is also the sweep line's anchor
+            sweep_list, sweep_count = np.unique(fillmap, return_counts=True)
+            for i in range(len(sweep_list)):
+                idx = sweep_list[i]
+                if idx == 0: continue
+                # 1. point sets 2. if have been merged 3. region area
+                points = np.where(fillmap == idx)
+                sweep_dict[idx] = [points, False, sweep_count[i]]
+                sweep_ml.append(points[0].min())
+
+            sweep_list = sweep_list[np.argsort(np.array(sweep_ml))]
+
+            return sweep_list, sweep_dict
+
+        # turn fill map to sweep list
+        r_idx_neural, r_dict_neural = to_sweep_list(fillmap_neural_fullsize)
+        r_idx_artist, r_dict_artist = to_sweep_list(fillmap_artist_fullsize)
+
+        skip = []
+        for rn in tqdm(r_idx_neural):
+            
+            if rn == 0: continue
+
+            r1 = np.zeros(fillmap_neural_fullsize.shape)
+            r1[fillmap_neural_fullsize == rn] = 1
+
+            for ra in r_idx_artist:
+                if ra == 0: continue
+
+                # skip if this region has been merged
+                if r_dict_artist[ra][1]: continue
+
+                # compute iou of this two regions
+                r2 = np.zeros(r1.shape)
+                r2[fillmap_artist_fullsize == ra] = 1
+                iou = (r1 * r2).sum()
+
+                # compute the precentage of iou/region area
+                c1 = iou/r_dict_neural[rn][2]
+                c2 = iou/r_dict_artist[ra][2]
+
+                # merge
+                # r1 and r2 are quite similar, then use r2 instead of r1
+                if c1 > 0.9 and c2 > 0.9:
+                    result[r_dict_artist[ra][0]] = rn
+                    r_dict_artist[ra][1] = True
+                    continue
+                
+                # # r1 is almost contained by r2, the keep r1
+                # elif c1 > 0.9 and c2 < 0.6:
+                #     result[r_dict_neural[rn][0]] = rn
+                #     # todo:
+                #     # then we need refinement!
+
+                # r2 is almost covered by r1, then merge r2 into r1
+                elif c1 < 0.6 and c2 > 0.9:
+                    result[r_dict_artist[ra][0]] = rn
+                    r_dict_artist[ra][1] = True
+                
+                # r1 and r2 are not close, do nothing then
+                else:
+                    # we probably could record the c1 and c2, see what the parameter looks like
+                    if c1 != 0 and c2 != 0:
+                        skip.append((c1,c2))
+
+        return result.astype(np.uint8), skip
+
 
 def show_region(region_bit):
     plt.imshow(show_fill_map(region_bit))
@@ -394,8 +530,6 @@ def trappedball_2pass_exp(path_line, path_line_sim, save_file=False):
         fill_scaled[np.where(line_scaled<220)] = 0
         fill_scaled_v1[np.where(line<220)] = 0
         fill_full[np.where(line<220)]=0
-
-        
 
         # save result
         cv2.imwrite("fill_sacled.png", fill_scaled)

@@ -252,9 +252,9 @@ def debug():
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
     parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/CP_epoch2501.pth")
     parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/CP_epoch5001.pth")
-    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/CP_epoch2001.pth")
+    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/CP_epoch3501.pth")
     parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
-    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch701.pth")
+    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch901.pth")
     args = parser.parse_args()
 
     # initailize
@@ -269,8 +269,8 @@ def debug():
   
     
     img = Image.open("./flatting/validation/train_008.png").convert("L")
-    pred_and_fill(img, radius=1, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
+    pred_and_fill(img, radius=2, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    # main()
-    debug()
+    main()
+    # debug()
