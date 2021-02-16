@@ -1,5 +1,6 @@
 
 from trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
+from trappedball_fill import get_ball_structuring_element, extract_line, to_masked_line
 from thinning import thinning
 from skimage.morphology import skeletonize
 from PIL import Image
@@ -114,9 +115,11 @@ def region_get_map(path_to_png,
     
     # merge small pieces into large region, but what is the mergeing stradegy?
     fillmap_neural = merge_fill(fillmap_neural)
+    
     if visualize_steps:
         i+=1
         cv2.imwrite("%d.merged.png"%i, show_fill_map(fillmap_neural))
+    
     fillmap_neural = thinning(fillmap_neural)
     
     if visualize_steps:
@@ -131,25 +134,82 @@ def region_get_map(path_to_png,
     fill_neural = show_fill_map(fillmap_neural)
 
     # version2, filling result overlay simpified line
-    fillmap_neural[np.where(line_simplify == 0)]=0
-    fill_neural_line = show_fill_map(fillmap_neural)
+    fill_neural_line = fill_neural.copy()
+    fill_neural_line[line_simplify == 0] = 0
 
     # version3, filling result overlay down scaled artist line
-    fillmap_neural[np.where(line_artist == 0)]=0
-    fill_artist_line = show_fill_map(fillmap_neural)
+    fill_artist_line = fill_neural.copy()
+    fill_artist_line[line_artist == 0] = 0
 
     # version4, up scaled filling result overlay full size artist line
+    # there are two kinds of informations that need to be remained in the similified line
+    # 1. removal lines
+    # 2. adding lines
+
+    '''
+    NOT WORK
+    1. extract line from fill map
+    '''
     # line_simplify_fullsize = cv2.resize(line_simplify.astype(np.uint8), 
     #                             (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
     #                             interpolation = cv2.INTER_NEAREST)
     # _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 125, 255, cv2.THRESH_BINARY)
-    # print("Log:\textracting skeletion")
+    
+    # print("Log:\tmasking artist line")
+    # # upscale line mask to full size
+    # fill_neural_fullsize = show_fill_map(fillmap_neural)
+    # blur = cv2.GaussianBlur(fill_neural_fullsize, (3,3), 0)
+    # fill_neural_fullsize = cv2.addWeighted(blur, 1.5, fill_neural_fullsize, -0.5, 0)
+    # fill_neural_fullsize = cv2.resize(fill_neural_fullsize, 
+    #                             (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
+    #                             interpolation = cv2.INTER_NEAREST)
+    # # extract line form filled result
+    # line_extracted = extract_line(fill_neural_fullsize)
+    # # line_extracted = cv2.Laplacian(fill_neural_fullsize,cv2.CV_64F)
+    # # line_extracted = cv2.Canny(fill_neural_fullsize, 100, 200, L2gradient=True)
+
+    # # use it to generate enhanced line mask
+    # # not need to implement futher, the quality of extracted line is too tortuous to be used
+    
+    '''
+    2. combine and mask lines at donwscaled size
+    '''
+    # get masked line 
+    line_masked = to_masked_line(line_simplify, line_artist, rk1=1, rk2=1)
+
+
+    # up scale masked line to full size
+    line_masked_fullsize_t = cv2.resize(line_masked.astype(np.uint8), 
+                            (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
+                            interpolation = cv2.INTER_NEAREST)
+
+    # maske with fullsize artist line again
+    line_masked_fullsize = to_masked_line(line_masked_fullsize_t, line_artist_fullsize, rk1=2, rk2=2)    
+
+    # mask_add_skle = skeletonize((255 - line_simplify)/255, method='lee')
+
+    
+    # then up-scale to the full size
+    
+    
+
+
+
+
+    # skeleton is not a good idea
     # line_simplify_fullsize = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
 
-    # fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
+    
+    
+    
+    # mask_add_skle = skeletonize((255 - line_simplify_fullsize)/255, method='lee')
+    mask_add = np.logical_and(mask_add_skle==255, np.logical_xor(mask_add_skle==255, line_artist_fullsize==0))
+
+    # line_artist_masked = 
+    fillmap_neural_fullsize[np.logical_or(line_artist_fullsize < 125, line_simplify_fullsize == 255)]=0
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = merger_fill_2nd(fillmap_neural_fullsize)[0]
-    # fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
+    fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     fill_neural_fullsize[line_artist_fullsize < 125] = 0
 

@@ -254,23 +254,23 @@ def debug():
     parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/CP_epoch5001.pth")
     parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/CP_epoch2001.pth")
     parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
-    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch501.pth")
+    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch701.pth")
     args = parser.parse_args()
 
     # initailize
     nets = {}
     nets["1024"] = initial_models(args.ckpt_1024)
-    nets["1024_rand"] = initial_models(args.ckpt_512_rand)
+    nets["1024_rand"] = initial_models(args.ckpt_1024_rand)
     nets["512"] = initial_models(args.ckpt_512)
     nets["512_rand"] = initial_models(args.ckpt_512_rand)
     nets["256"] = initial_models(args.ckpt_256)
-    nets["256_rand"] = initial_models(args.ckpt_512_rand)
+    nets["256_rand"] = initial_models(args.ckpt_256_rand)
     
   
     
     img = Image.open("./flatting/validation/train_008.png").convert("L")
-    pred_and_fill(img, radius=1, op='1024_rand', patch="False", nets=nets, outputs="./flatting/gradio")
+    pred_and_fill(img, radius=1, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    main()
-    # debug()
+    # main()
+    debug()

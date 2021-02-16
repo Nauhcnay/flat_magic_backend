@@ -4,12 +4,13 @@ import pdb
 import pickle
 import time
 import pyximport; pyximport.install()
-# import adjacency_matrix
+import adjacency_matrix
 # it seemed that multi thread will not help to reduce running time
 # https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
 from multiprocessing import Pool
 from multiprocessing import freeze_support
 from functools import partial
+from skimage.morphology import skeletonize
 
 
 
@@ -27,6 +28,81 @@ def load_obj(load_path='fill_map.pickle'):
         fill_graph = pickle.load(f)
 
     return fill_graph
+
+def extract_line(fills_result):
+    
+    img = cv2.blur(fills_result,(5,5))
+    
+    # analyaze the gradient of flat image
+    grad = cv2.Laplacian(img,cv2.CV_64F)
+    grad = abs(grad).sum(axis = -1)
+    grad_v, grad_c = np.unique(grad, return_counts=True)
+
+    # remove the majority grad, which is 0
+    assert np.where(grad_v==0) == np.where(grad_c==grad_c.max())
+    grad_v = np.delete(grad_v, np.where(grad_v==0))
+    grad_c = np.delete(grad_c, np.where(grad_c==grad_c.max()))
+    print("Log:\tlen of grad_v %d"%len(grad_v))
+    grad_c_cum = np.cumsum(grad_c)
+
+    # if grad number is greater than 100, then this probably means the current
+    # image exists pretty similar colors, then we should apply 
+    # another set of parameter to detect edge
+    # this could be better if we can find the realtion between them
+    if len(grad_v) < 100:
+        min_val = grad_v[np.where(grad_c_cum<=np.percentile(grad_c_cum, 25))[0].max()]
+        max_val = grad_v[np.where(grad_c_cum<=np.percentile(grad_c_cum, 40))[0].max()]
+    else:
+        min_val = grad_v[np.where(grad_c_cum<=np.percentile(grad_c_cum, 1))[0].max()]
+        max_val = grad_v[np.where(grad_c_cum<=np.percentile(grad_c_cum, 10))[0].max()]
+
+    edges = cv2.Canny(img, min_val, max_val, L2gradient=True)
+    return 255-edges
+
+def to_masked_line(line_sim, line_artist, rk1=None, rk2=None, ak=None, connect=None):
+    '''
+    Given:
+        line_sim, simplified line, which is also the neural networks output
+        line_artist, artist line, the original input
+        rk, remove kernel, thicken kernel. if the neural network ouput too thin line, use this option
+        ak, add kernel, thinning kernel. if the neural network output too thick line, use this option
+    Return:
+        the masked line for filling
+    '''
+    # 1. generate lines removed unecessary strokes
+    if rk1 != None:
+        kernel_remove1 = get_ball_structuring_element(rk1)
+        # make the simplified line to cover the artist's line
+        mask_remove = cv2.morphologyEx(line_sim, cv2.MORPH_ERODE, kernel_remove1)
+    else:
+        mask_remove = line_sim
+
+    mask_remove = np.logical_and(line_artist==0, mask_remove==0)
+    
+    # 2. generate lines that added by line_sim
+    if ak != None:
+        kernel_add = get_ball_structuring_element(ak)
+        # try to make the artist's line cover the simplified line
+        mask_add = cv2.morphologyEx(line_sim, cv2.MORPH_DILATE, kernel_add)
+    else:
+        mask_add = line_sim
+    mask_add = 255 - skeletonize((255 - mask_add)/255, method='lee')
+
+    if rk2 != None:
+        kernel_remove2 = get_ball_structuring_element(rk2)
+        line_artist = cv2.morphologyEx(line_artist, cv2.MORPH_ERODE, kernel_remove2)
+    mask_add = np.logical_and(mask_add==0, np.logical_xor(mask_add==0, line_artist==0))
+    
+    # 3. combine and return the result
+    mask = np.logical_or(mask_remove, mask_add).astype(np.uint8)*255
+
+    # 4. connect dot lines if exists
+    if connect != None:
+        kernel_con = get_ball_structuring_element(1)
+        for _ in range(connect):
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_con)
+
+    return 255 - mask
 
 
 def get_ball_structuring_element(radius):
@@ -888,36 +964,34 @@ def merger_fill_2nd(fillmap, max_iter=10, low_th=0.001, max_th=0.01, debug=False
         print("Log:\tsplit bleeding regions")
         result, fill_id_new = split_region(result)
     
-    return result, None
+    # initailize the graph of regions
+    if debug:
+        print("Log:\tload fills_graph.pickle")
+        fills_graph_init = load_obj("fills_graph.pickle")
+        fills_graph = load_obj("fills_graph.pickle")
+    else:
+        print("Log:\tinitialize region graph")
+        fills_graph = to_graph(result, fill_id_new)
 
-    # # initailize the graph of regions
-    # if debug:
-    #     print("Log:\tload fills_graph.pickle")
-    #     fills_graph_init = load_obj("fills_graph.pickle")
-    #     fills_graph = load_obj("fills_graph.pickle")
-    # else:
-    #     print("Log:\tinitialize region graph")
-    #     fills_graph = to_graph(result, fill_id_new)
+    # find neighbor
+    if debug:
+        print("Log:\tload fills_graph_n.pickle")
+        fills_graph = load_obj("fills_graph_n.pickle")
+    else:
+        print("Log:\tfind region neighbors")
+        fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
 
-    # # find neighbor
-    # if debug:
-    #     print("Log:\tload fills_graph_n.pickle")
-    #     fills_graph = load_obj("fills_graph_n.pickle")
-    # else:
-    #     print("Log:\tfind region neighbors")
-    #     fills_graph = find_neighbor(result, fills_graph, max_height, max_width)
+    # self check if the graph is constructed correctly 
+    graph_self_check(fills_graph)              
 
-    # # self check if the graph is constructed correctly 
-    # graph_self_check(fills_graph)              
-
-    # # 2. merge all small region to its largest neighbor
-    # # this step seems fast, it only takes around 20s to finish
-    # print("Log:\tremove leaking color")
-    # fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
+    # 2. merge all small region to its largest neighbor
+    # this step seems fast, it only takes around 20s to finish
+    print("Log:\tremove leaking color")
+    fills_graph = remove_bleeding(fills_graph, fill_id_new, max_iter, result, low_th, max_th)
     
-    # # 3. show the refined the result
-    # visualize_graph(fills_graph, result, region=None)
+    # 3. show the refined the result
+    visualize_graph(fills_graph, result, region=None)
     
-    # # 4. map region graph back to fillmaps
-    # result = to_fillmap(result, fills_graph)
-    # return result, fills_graph
+    # 4. map region graph back to fillmaps
+    result = to_fillmap(result, fills_graph)
+    return result, fills_graph
