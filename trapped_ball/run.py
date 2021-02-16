@@ -194,7 +194,7 @@ def region_get_map(path_to_png,
     # let's do it!
     fillmap_artist_fullsize = np.ones(fillmap_neural_fullsize.shape, dtype=np.uint8) * 255
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
-    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
+    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=4)
 
     print("Log:\trefine filling results")
 
