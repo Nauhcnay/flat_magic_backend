@@ -131,17 +131,17 @@ def pred_and_fill(img, op, radius, patch, nets, outputs="./flatting/gradio"):
     # img.save(outs[0])
 
     print("Log:\ttrapping ball filling with radius %s"%radius)
-    fill, fill_pred, fill_line = region_get_map(edge.convert("L"),
-                                # output_png=(outputs,op),
-                                output_png=None,
-                                radius_set=[int(radius)], percentiles=[0],
-                                save_org_size = True,
-                                path_to_line=img,
-                                return_numpy=True)
+    fill, fill_pred, fill_artist, fill_final = region_get_map(edge.convert("L"),
+                                                # output_png=(outputs,op),
+                                                output_png=None,
+                                                radius_set=[int(radius)], percentiles=[0],
+                                                save_org_size = True,
+                                                path_to_line=img,
+                                                return_numpy=True)
     
     # zips = zip_files(outs)
 
-    return edge, fill, fill_pred, fill_line
+    return edge, fill, fill_pred, fill_artist, fill_final
     # return edge, fill, fill_pred, fill_line, zips
 
 def initial_models(path_to_ckpt):
@@ -189,10 +189,11 @@ def initial_flatting_input():
     out1 = gr.outputs.Image(type='pil', label='line prediction')
     out2 = gr.outputs.Image(type='pil', label='fill')
     out3 = gr.outputs.Image(type='pil', label='fill with pred')
-    out4 = gr.outputs.Image(type='pil', label='fill with line')
+    out4 = gr.outputs.Image(type='pil', label='fill artist')
+    out5 = gr.outputs.Image(type='pil', label='fill final')
     # out5 = gr.outputs.File(label="all results")
 
-    return [img, model, radius], [out1, out2, out3, out4]
+    return [img, model, radius], [out1, out2, out3, out4, out5]
     # return [img, resize], [out1, out2, out3, out4, out5]
 
 def start_demo(fn, inputs, outputs, examples):

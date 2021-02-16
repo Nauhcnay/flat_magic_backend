@@ -206,7 +206,7 @@ def region_get_map(path_to_png,
     
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
-
+    fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     fill_neural_fullsize[line_artist_fullsize < 125] = 0
 
@@ -221,7 +221,7 @@ def region_get_map(path_to_png,
             cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line_full.png"), fill_neural_fullsize)
     
     if return_numpy:
-        return fill_neural, fill_neural_line, fill_neural_fullsize
+        return fill_neural, fill_neural_line, fill_artist_fullsize, fill_neural_fullsize
     else:
         return fillmap_neural
 
