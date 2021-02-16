@@ -232,7 +232,7 @@ def bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th)
         th = int(w * h * th)    
 
         num_regions = len(np.unique(fillmap_artist_fullsize))
-        A = adjacency_matrix.adjacency_matrix(fillmap_artist_fullsize.astype(np.int32), num_regions)
+        A = adjacency_matrix.adjacency_matrix(fillmap_artist_fullsize.astype(np.int64), num_regions)
 
         r_idx_neural, r_count_neural = np.unique(fillmap_neural_fullsize, return_counts=True)
         r_idx_artist, r_count_artist = np.unique(fillmap_artist_fullsize, return_counts=True)
