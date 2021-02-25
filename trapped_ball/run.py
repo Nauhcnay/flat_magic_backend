@@ -234,10 +234,11 @@ def region_get_map(path_to_png,
 
         return fill_c
 
+    print("Log:\tcompute cartesian product")
     fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize, fillmap_neural_fullsize)
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
     # still need additional stage to split all unconnected regions
-    fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize)
+    # fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize)
     
     print("Log:\trefine filling results")
     # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
@@ -259,6 +260,7 @@ def region_get_map(path_to_png,
         if save_org_size:
             cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line_full.png"), fill_neural_fullsize)
     
+    print("Log:\tdone")
     if return_numpy:
         return fill_neural, fill_neural_line, fill_artist_fullsize, fill_neural_fullsize
     else:
