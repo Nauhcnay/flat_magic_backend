@@ -72,6 +72,10 @@ cpdef long[:,:] adjacency_matrix_internal( long[:,:] image, long[:,:] A ) nogil:
             A[region0,region1] = 1
             A[region1,region0] = 1
     
+    ## region will not connect to itself
+    for i in range(len(A)):
+        A[i, i] = 0
+
     return A
 
 def region_sizes( image, num_regions ):

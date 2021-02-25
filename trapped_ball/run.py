@@ -194,16 +194,55 @@ def region_get_map(path_to_png,
     # let's do it!
     fillmap_artist_fullsize = np.ones(fillmap_neural_fullsize.shape, dtype=np.uint8) * 255
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
-    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=4)
 
+    # we need do something more before this step
+    # compute the catesian product of two filled map
+    
+    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
+
+    def fillmap_cartesian_product(fill1, fill2):
+        '''
+        Given:
+            fill1, fillmap 1
+            fill2, fillmap 2
+        Return:
+            A new fillmap based on its cartesian_product
+        '''
+        assert fill1.shape == fill2.shape
+
+        if len(fill1.shape)==2:
+            fill1 = np.expand_dims(fill1, axis=-1)
+        
+        if len(fill2.shape)==2:
+            fill2 = np.expand_dims(fill2, axis=-1)
+        
+        # cat along channel
+        fill_c = np.concatenate((fill1, fill2), axis=-1)
+
+        # regnerate all region labels
+        labels, inv = np.unique(fill_c.reshape(-1, 2), return_inverse=True, axis=0)
+        labels = tuple(map(tuple, labels))
+        
+        l_to_r = {}
+        for i in range(len(labels)):
+            l_to_r[labels[i]] = i+1
+
+        # assign new labels back to fillmap
+        # https://stackoverflow.com/questions/16992713/translate-every-element-in-numpy-array-according-to-key        
+        fill_c = np.array(list(map(l_to_r.get, labels)))[inv]
+        fill_c = fill_c.reshape(fill1.shape[0:2])
+
+        return fill_c
+
+    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize, fillmap_neural_fullsize)
+    fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
+    # still need additional stage to split all unconnected regions
+    fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize)
+    
     print("Log:\trefine filling results")
-
-    # # this also not fully worked
     # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
-    
-    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.001)
-    
+    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
     fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize)
@@ -225,68 +264,146 @@ def region_get_map(path_to_png,
     else:
         return fillmap_neural
 
-def bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th):
+# verify if there is no isolate sub-region in each reigon, if yes, split it and assign a new region id
+def verify_reigon(fillmap):
+    
+    print("Log:\tverfiy regions in fillmap")
+    labels = np.unique(fillmap)
+    fillmap_out = np.zeros(fillmap.shape, dtype=np.int)
+    next_label = len(labels)
+
+    for i in tqdm(range(len(labels))):
+        if labels[i] == 0: continue
+        assert i != 0
+
+        fillmap_out[fillmap == labels[i]] = i
+
+        region = np.ones(fillmap.shape, dtype=np.uint8) * 255
+        region[fillmap != labels[i]] = 0
+        _, region_verify = cv2.connectedComponents(region, connectivity=8)
+        label_verify = np.unique(region_verify)
+
+        if len(label_verify) > 2:
+            for j in range(2, len(label_verify)):
+                fillmap_out[region_verify == j] = next_label
+                next_label += 1
+    
+    assert np.unique(fillmap_out).max()+1 == len(np.unique(fillmap_out))
+    
+    return fillmap_out
+
+def update_adj_matrix(A, source, target):
         
-        w, h = fillmap_neural_fullsize.shape
+    # update A, region s and max is not neigbor any more
+    # assert A[source, target] == 1
+    A[source, target] = 0
 
-        th = int(w * h * th)    
+    # assert A[target, source] == 1
+    A[target, source] = 0        
 
-        num_regions = len(np.unique(fillmap_artist_fullsize))
-        A = adjacency_matrix.adjacency_matrix(fillmap_artist_fullsize.astype(np.int64), num_regions)
+    # neighbors of s should become neighbor of max
+    s_neighbors_x = np.where(A[source,:] == 1)
+    s_neighbors_y = np.where(A[:,source] == 1)
+    A[source, s_neighbors_x] = 0
+    A[s_neighbors_y, source] = 0
 
-        r_idx_neural, r_count_neural = np.unique(fillmap_neural_fullsize, return_counts=True)
-        r_idx_artist, r_count_artist = np.unique(fillmap_artist_fullsize, return_counts=True)
+    # neighbor of neighbors of s should use max instead of s
+    A[s_neighbors_x, target] = 1
+    A[target, s_neighbors_y] = 1
+    
+    return A
+
+def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
+    
+    F = {} #mapping of large region to ref region
+    for i in range(len(r_idx)):
+        r = r_idx[i]
+
+        if r == 0: continue
+        label_mask = fill_map_source == r
+        idx, count = np.unique(fill_map_ref[label_mask], return_counts=True)
+        most_common = idx[np.argmax(count)]
+        F[r] = most_common
+
+    for r in r_idx:
+        if r == 0: continue
+        label_mask = fill_map_source == r
+        result[label_mask] = F[r]
+
+    return result
+
+def merge_small(fill_map_ref, fill_map_source, th):
+    num_regions = len(np.unique(fill_map_source))
+    A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int32), num_regions)
+
+    r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+    r_idx_source_small = r_idx_source[r_count_source < th]
+    stop = False
+    
+    while len(r_idx_source_small) > 0 and stop == False:
         
-        def get_size(idx, count, r):
-            assert r in idx
-            assert r != 0
+        stop = True
 
-            return count[np.where(idx==r)]
+        for s in r_idx_source_small:
 
-        F = {}
-        for i in range(len(r_idx_artist)):
-            r = r_idx_artist[i]
-
-            if r == 0: continue
-            label_mask = fillmap_artist_fullsize == r
-            idx, count = np.unique(fillmap_neural_fullsize[label_mask], return_counts=True)
-            most_common = idx[np.argmax(count)]
-            F[r] = most_common
-
-        small_regions = r_idx_artist[r_count_artist < th]
-
-        result = np.zeros(fillmap_neural_fullsize.shape, dtype=np.int)
-
-        for r in r_idx_artist:
-            if r == 0: continue
-            label_mask = fillmap_artist_fullsize == r
-            result[label_mask] = F[r]
-
-        # this may not be neccessary for result, but is necessary for further editing
-        # todo
-        # for s in small_regions:
-        #     label_mask = fillmap_artist_fullsize == s
-        #     neighbors = np.where(A[s,:] == 1)[0]
+            label_mask = fill_map_source == s
+            neighbors = np.where(A[s,:] == 1)[0]
             
-        #     # remove line regions, we don't need to consider that
-        #     neighbors = neighbors[np.where(neighbors != 0)]
+            # remove line regions
+            neighbors = neighbors[neighbors != 0]
 
-        #     if len(neighbors) == 0: continue
+            # skip if this region doesn't have neighbors
+            if len(neighbors) == 0: continue
             
-        #     sizes = np.array([get_size(r_idx_artist, r_count_artist, n) for n in neighbors])
+            # find region size 
+            sizes = np.array([get_size(r_idx_source, r_count_source, n) for n in neighbors]).flatten()
 
-        #     if neighbors[np.argsort(sizes)[-1]] == 0 and len(neighbors) > 1:
-        #         max_neighbor = neighbors[np.argsort(sizes)[-2]]
+            # merge regions if necessary
+            if neighbors[np.argsort(sizes)[-1]] == 0 and len(neighbors) > 1:
+                # if its largest neighbor is line skip it
+                max_neighbor = neighbors[np.argsort(sizes)[-2]]
+                A = update_adj_matrix(A, s, max_neighbor)
+                fill_map_source[label_mask] = max_neighbor
+                stop = False
+            elif len(neighbors) >= 1:
+                # esle return its largest nerighbor
+                max_neighbor = neighbors[np.argsort(sizes)[-1]]
+                A = update_adj_matrix(A, s, max_neighbor)
+                fill_map_source[label_mask] = max_neighbor
+                stop = False
+            else:
+                continue
+                
+        r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+        r_idx_source_small = r_idx_source[r_count_source < th]
 
-        #     elif len(neighbors) > 1:
-        #         max_neighbor = neighbors[np.argsort(sizes)[-1]]
+    return fill_map_source
 
-        #     else:
-        #         continue
-            
-        #     result[label_mask] = max_neighbor
+def get_size(idx, count, r):
+    assert r in idx
+    assert r != 0
 
-        return result
+    return count[np.where(idx==r)]
+
+def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
+
+    fill_map_ref = fill_map_ref.copy()
+    fill_map_source = fill_map_source.copy()
+
+    w, h = fill_map_ref.shape
+    th = int(w * h * th)
+    
+    result = np.zeros(fill_map_ref.shape, dtype=np.int)
+    # 1. merge small regions which has neighbors
+    # the int64 means long on linux but long long on windows, sad
+    fill_map_source = merge_small(fill_map_ref, fill_map_source, th)
+    
+    # 2. merge large regions
+    r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+    r_idx_source_small = r_idx_source[r_count_source < th]
+    result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
+    
+    return result
 
 def sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th, keep_th):
         
@@ -311,18 +428,18 @@ def sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th, k
             return sweep_list, sweep_dict
 
         # turn fill map to sweep list
-        r_idx_neural, r_dict_neural = to_sweep_list(fillmap_neural_fullsize)
-        r_idx_artist, r_dict_artist = to_sweep_list(fillmap_artist_fullsize)
+        r_idx_ref, r_dict_ref = to_sweep_list(fillmap_neural_fullsize)
+        r_idx_source, r_dict_artist = to_sweep_list(fillmap_artist_fullsize)
 
         skip = []
-        for rn in tqdm(r_idx_neural):
+        for rn in tqdm(r_idx_ref):
             
             if rn == 0: continue
 
             r1 = np.zeros(fillmap_neural_fullsize.shape)
             r1[fillmap_neural_fullsize == rn] = 1
 
-            for ra in r_idx_artist:
+            for ra in r_idx_source:
                 if ra == 0: continue
 
                 # skip if this region has been merged
@@ -334,7 +451,7 @@ def sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th, k
                 iou = (r1 * r2).sum()
 
                 # compute the precentage of iou/region area
-                c1 = iou/r_dict_neural[rn][2]
+                c1 = iou/r_dict_ref[rn][2]
                 c2 = iou/r_dict_artist[ra][2]
 
                 # merge
@@ -346,7 +463,7 @@ def sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th, k
                 
                 # # r1 is almost contained by r2, the keep r1
                 # elif c1 > 0.9 and c2 < 0.6:
-                #     result[r_dict_neural[rn][0]] = rn
+                #     result[r_dict_ref[rn][0]] = rn
                 #     # todo:
                 #     # then we need refinement!
 

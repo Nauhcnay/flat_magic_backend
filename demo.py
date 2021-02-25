@@ -251,11 +251,11 @@ def debug():
     # get base tcode number
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
-    parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/CP_epoch2501.pth")
-    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/CP_epoch5001.pth")
-    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/CP_epoch3501.pth")
+    parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/")
+    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
+    parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/")
     parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
-    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/CP_epoch901.pth")
+    parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/")
     args = parser.parse_args()
 
     # initailize
@@ -273,5 +273,5 @@ def debug():
     pred_and_fill(img, radius=2, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    main()
-    # debug()
+    # main()
+    debug()
