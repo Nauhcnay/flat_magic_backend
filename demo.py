@@ -273,5 +273,5 @@ def debug():
     pred_and_fill(img, radius=2, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    # main()
-    debug()
+    main()
+    # debug()

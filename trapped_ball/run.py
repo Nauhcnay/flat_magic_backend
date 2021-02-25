@@ -334,7 +334,7 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
 
 def merge_small(fill_map_ref, fill_map_source, th):
     num_regions = len(np.unique(fill_map_source))
-    A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int32), num_regions)
+    A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
 
     r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
     r_idx_source_small = r_idx_source[r_count_source < th]
