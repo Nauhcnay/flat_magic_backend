@@ -213,7 +213,7 @@ def region_get_map(path_to_png,
     
     print("Log:\trefine filling results")
     # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
-    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.001)
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.0005)
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
