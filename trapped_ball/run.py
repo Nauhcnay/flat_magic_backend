@@ -200,45 +200,16 @@ def region_get_map(path_to_png,
     
     _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
 
-    def fillmap_cartesian_product(fill1, fill2):
-        '''
-        Given:
-            fill1, fillmap 1
-            fill2, fillmap 2
-        Return:
-            A new fillmap based on its cartesian_product
-        '''
-        assert fill1.shape == fill2.shape
-
-        if len(fill1.shape)==2:
-            fill1 = np.expand_dims(fill1, axis=-1)
-        
-        if len(fill2.shape)==2:
-            fill2 = np.expand_dims(fill2, axis=-1)
-        
-        # cat along channel
-        fill_c = np.concatenate((fill1, fill2), axis=-1)
-
-        # regnerate all region labels
-        labels, inv = np.unique(fill_c.reshape(-1, 2), return_inverse=True, axis=0)
-        labels = tuple(map(tuple, labels))
-        
-        l_to_r = {}
-        for i in range(len(labels)):
-            l_to_r[labels[i]] = i+1
-
-        # assign new labels back to fillmap
-        # https://stackoverflow.com/questions/16992713/translate-every-element-in-numpy-array-according-to-key        
-        fill_c = np.array(list(map(l_to_r.get, labels)))[inv]
-        fill_c = fill_c.reshape(fill1.shape[0:2])
-
-        return fill_c
-
     print("Log:\tcompute cartesian product")
-    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize, fillmap_neural_fullsize)
+    fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy()
+    fillmap_neural_fullsize_c[line_artist_fullsize < 125] = 0
+    fillmap_neural_fullsize_c = verify_reigon(fillmap_neural_fullsize_c)
+
+    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize, fillmap_neural_fullsize_c)
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
+    
     # still need additional stage to split all unconnected regions
-    # fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize)
+    fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize, True)
     
     print("Log:\trefine filling results")
     # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
@@ -266,9 +237,44 @@ def region_get_map(path_to_png,
     else:
         return fillmap_neural
 
-# verify if there is no isolate sub-region in each reigon, if yes, split it and assign a new region id
-def verify_reigon(fillmap):
+def fillmap_cartesian_product(fill1, fill2):
+    '''
+    Given:
+        fill1, fillmap 1
+        fill2, fillmap 2
+    Return:
+        A new fillmap based on its cartesian_product
+    '''
+    assert fill1.shape == fill2.shape
+
+    if len(fill1.shape)==2:
+        fill1 = np.expand_dims(fill1, axis=-1)
     
+    if len(fill2.shape)==2:
+        fill2 = np.expand_dims(fill2, axis=-1)
+    
+    # cat along channel
+    fill_c = np.concatenate((fill1, fill2), axis=-1)
+
+    # regnerate all region labels
+    labels, inv = np.unique(fill_c.reshape(-1, 2), return_inverse=True, axis=0)
+    labels = tuple(map(tuple, labels))
+    
+    l_to_r = {}
+    for i in range(len(labels)):
+        l_to_r[labels[i]] = i+1
+
+    # assign new labels back to fillmap
+    # https://stackoverflow.com/questions/16992713/translate-every-element-in-numpy-array-according-to-key        
+    fill_c = np.array(list(map(l_to_r.get, labels)))[inv]
+    fill_c = fill_c.reshape(fill1.shape[0:2])
+
+    return fill_c
+
+
+# verify if there is no isolate sub-region in each reigon, if yes, split it and assign a new region id    
+def verify_reigon(fillmap, reorder_only=False):
+
     print("Log:\tverfiy regions in fillmap")
     labels = np.unique(fillmap)
     fillmap_out = np.zeros(fillmap.shape, dtype=np.int)
@@ -278,7 +284,10 @@ def verify_reigon(fillmap):
         if labels[i] == 0: continue
         assert i != 0
 
+        label_mask = fillmap == labels[i] 
         fillmap_out[fillmap == labels[i]] = i
+
+        if reorder_only: continue
 
         region = np.ones(fillmap.shape, dtype=np.uint8) * 255
         region[fillmap != labels[i]] = 0
@@ -401,8 +410,7 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     fill_map_source = merge_small(fill_map_ref, fill_map_source, th)
     
     # 2. merge large regions
-    r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
-    r_idx_source_small = r_idx_source[r_count_source < th]
+    r_idx_source= np.unique(fill_map_source)
     result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
     
     return result
