@@ -75,60 +75,72 @@ def generate_masked_line(line_simplify, line_artist, line_artist_fullsize):
 
         return line_masked_fullsize
 
-def region_get_map(path_to_png, 
-                output_png=None, 
+
+def region_get_map(path_to_line_sim, 
+                path_to_line_artist=None,
+                output_path=None, 
                 radius_set=[3,2,1],
                 percentiles=[90, 0, 0], 
                 visualize_steps=False,
-                path_to_line=None,
-                save_org_size=False,
                 return_numpy=False):
     '''
     Given:
-        the path to input svg file
+        the path to input png file
     Return:
         the initial region map as a numpy matrix
     '''
-    if type(path_to_png) == str:
-        # get file name
-        _, file = os.path.split(path_to_png)
-        name, _ = os.path.splitext(file)
+    def read_png(path_to_png, to_grayscale=True):
+        '''
+        Given:
+            path_to_png, it accept be any type of input, path, numpy array or PIL Image
+        Return:
+            the numpy array of a image
+        '''
 
-        # open image
-        print("Log:\topen %s"%path_to_png)
-        img_org = cv2.imread(path_to_png, cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(img_org, cv2.COLOR_BGR2GRAY)
-    else:
-        img = np.array(path_to_png)
-        if output_png != None:
-            name = output_png[1]
-            output_png = output_png[0]
+        # if it is png file, open it
+        if isinstance(path_to_png, str):
+            # get file name
+            _, file = os.path.split(path_to_png)
+            name, _ = os.path.splitext(file)
+
+            print("Log:\topen %s"%path_to_png)
+            img_org = cv2.imread(path_to_png, cv2.IMREAD_COLOR)
+            if to_grayscale:
+                img = cv2.cvtColor(img_org, cv2.COLOR_BGR2GRAY)
+            else:
+                img = img_org
+        
+        elif isinstance(path_to_png, Image.Image):
+            if to_grayscale:
+                path_to_png = path_to_png.convert("L")
+            img = np.array(path_to_png)
+            name = "result"
+
+        elif isinstance(path_to_png, np.ndarray):
+            img = path_to_png
+            if len(img.shape) > 2 and to_grayscale:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            name = "result"
+
         else:
-            name = 0
+            raise ValueError("The input data type %s is not supported"%str(type(path_to_png)))
 
+        return img, name
+
+    # read files
+    img, name = read_png(path_to_line_sim)
+    line_artist_fullsize, _ = read_png(path_to_line_artist)
+    
     print("Log:\ttrapped ball filling")
     _, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
     result = line_simplify # this should be line_simplify numpu array
     
-    if path_to_line == None and type(path_to_png) == str:
-        path_to_line = path_to_png.replace("_detection", "")
-    
-    if type(path_to_line) == str:
-        assert exists(path_to_line)
-        print("Log:\topen %s"%path_to_line)
-        line_artist_fullsize = cv2.imread(path_to_line, cv2.IMREAD_COLOR)
-        
-    elif path_to_line != None:
-        line_artist_fullsize = np.array(path_to_line)
-    else:
-        line_artist_fullsize = img
-
     if len(line_artist_fullsize.shape) == 3:
         line = cv2.cvtColor(line_artist_fullsize, cv2.COLOR_BGR2GRAY)
     else:
         line = line_artist_fullsize
-
+    
     # may be resize the original line is not a good idea
     if line.shape[:2] != line_simplify.shape[:2]:
         line = cv2.resize(line, (line_simplify.shape[1],line_simplify.shape[0]), 
@@ -198,22 +210,21 @@ def region_get_map(path_to_png,
     # we need do something more before this step
     # compute the catesian product of two filled map
     
-    _, fillmap_artist_fullsize = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
+    _, fillmap_artist_fullsize_c = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
 
     print("Log:\tcompute cartesian product")
-    fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy()
+    fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy().astype(np.int32)
     fillmap_neural_fullsize_c[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize_c = verify_reigon(fillmap_neural_fullsize_c)
 
-    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize, fillmap_neural_fullsize_c)
+    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize_c, fillmap_neural_fullsize_c)
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
     
-    # still need additional stage to split all unconnected regions
+    # re-order both fillmaps
     fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize, True)
+    fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize, True)
     
-    print("Log:\trefine filling results")
-    # fillmap_neural_fullsize, skip = sweep_line_merge(fillmap_neural_fullsize, fillmap_artist_fullsize, add_th=0.4, keep_th=0.001)
-    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.0005)
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.0001)
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
@@ -221,15 +232,12 @@ def region_get_map(path_to_png,
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     fill_neural_fullsize[line_artist_fullsize < 125] = 0
 
-    if output_png is not None:
+    if output_path is not None:
 
-        print("Log:\tsave at %s"%os.path.join(output_png, str(name)+"_fill.png"))        
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill.png"), fill_neural)
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_edge.png"), fill_neural_line)
-        cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line.png"), fill_artist_line)
-
-        if save_org_size:
-            cv2.imwrite(os.path.join(output_png, str(name)+"_fill_line_full.png"), fill_neural_fullsize)
+        print("Log:\tsave at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
+        cv2.imwrite(os.path.join(output_path, str(name)+"_fill.png"), fill_neural_fullsize)
+        cv2.imwrite(os.path.join(output_path, str(name)+"_fill_line.png"), 
+            show_fill_map(fillmap_artist_fullsize_c))
     
     print("Log:\tdone")
     if return_numpy:
@@ -276,31 +284,42 @@ def fillmap_cartesian_product(fill1, fill2):
 def verify_reigon(fillmap, reorder_only=False):
 
     print("Log:\tverfiy regions in fillmap")
+    fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
-    fillmap_out = np.zeros(fillmap.shape, dtype=np.int)
-    next_label = len(labels)
 
-    for i in tqdm(range(len(labels))):
-        if labels[i] == 0: continue
-        assert i != 0
+    # split region 
+    next_label = labels.max() + 1
+    if reorder_only == False:
+        for r in tqdm(labels):
+            if r == 0: continue
+            # inital input fill map
+            region = np.ones(fillmap.shape, dtype=np.uint8)
+            region[fillmap != r] = 0
+            # try to split region
+            _, region_verify = cv2.connectedComponents(region, connectivity=8)
+            # split region if necessary
+            label_verify = np.unique(region_verify)
+            if len(label_verify) > 2: # skip 0 and the first region
+                for j in range(2, len(label_verify)):
+                    fillmap[region_verify == label_verify[j]] = next_label
+                    next_label += 1
 
-        label_mask = fillmap == labels[i] 
-        fillmap_out[fillmap == labels[i]] = i
-
-        if reorder_only: continue
-
-        region = np.ones(fillmap.shape, dtype=np.uint8) * 255
-        region[fillmap != labels[i]] = 0
-        _, region_verify = cv2.connectedComponents(region, connectivity=8)
-        label_verify = np.unique(region_verify)
-
-        if len(label_verify) > 2:
-            for j in range(2, len(label_verify)):
-                fillmap_out[region_verify == j] = next_label
-                next_label += 1
+    # re-order regions
+    assert np.unique(fillmap).max() == next_label - 1
+    old_to_new = [0] * next_label
+    idx = 1
+    l = len(old_to_new)
+    labels = np.unique(fillmap)
+    for i in range(l): 
+        if i in labels and i != 0:
+            old_to_new[i] = idx
+            idx += 1
+        else:
+            old_to_new[i] = 0
+    old_to_new = np.array(old_to_new)
+    fillmap_out = old_to_new[fillmap]
     
-    assert np.unique(fillmap_out).max()+1 == len(np.unique(fillmap_out))
-    
+    # assert np.unique(fillmap_out).max()+1 == len(np.unique(fillmap_out))
     return fillmap_out
 
 def update_adj_matrix(A, source, target):
@@ -344,11 +363,35 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
     return result
 
 def merge_small(fill_map_ref, fill_map_source, th):
+    
+    fill_map_source = fill_map_source.copy()
+    fill_map_ref = fill_map_ref.copy()
+
     num_regions = len(np.unique(fill_map_source))
-    A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
+    
+    # the definition of long int is different on windows and linux
+    try:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int32), num_regions)
+    except:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
 
     r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
-    r_idx_source_small = r_idx_source[r_count_source < th]
+    
+    def get_small_region(r_idx_source, r_count_source, th):
+        r_idx_source_small = []
+        for i in range(len(r_idx_source)):
+        # there are two kinds of region should be identified as small region:
+            # 1. size less that threshold
+            if r_count_source[i] < th:
+                r_idx_source_small.append(r_idx_source[i])
+            # 2. not the neighbor of artist line
+            n = np.where(A[r_idx_source[i],:] == 1)[0]
+            if 0 not in n:
+                r_idx_source_small.append(r_idx_source[i])
+        return r_idx_source_small
+
+    r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+    
     stop = False
     
     while len(r_idx_source_small) > 0 and stop == False:
@@ -356,6 +399,7 @@ def merge_small(fill_map_ref, fill_map_source, th):
         stop = True
 
         for s in r_idx_source_small:
+            if s == 0: continue
 
             label_mask = fill_map_source == s
             neighbors = np.where(A[s,:] == 1)[0]
@@ -386,7 +430,7 @@ def merge_small(fill_map_ref, fill_map_source, th):
                 continue
                 
         r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
-        r_idx_source_small = r_idx_source[r_count_source < th]
+        r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
 
     return fill_map_source
 
@@ -404,12 +448,14 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     w, h = fill_map_ref.shape
     th = int(w * h * th)
     
-    result = np.zeros(fill_map_ref.shape, dtype=np.int)
+    result = np.zeros(fill_map_ref.shape, dtype=np.int32)
     # 1. merge small regions which has neighbors
     # the int64 means long on linux but long long on windows, sad
+    print("Log:\tmerge small regions")
     fill_map_source = merge_small(fill_map_ref, fill_map_source, th)
     
     # 2. merge large regions
+    print("Log:\tmerge large regions")
     r_idx_source= np.unique(fill_map_source)
     result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
     
@@ -699,7 +745,14 @@ if __name__ == '__main__':
         # let's test 2 pass merge
         line = "./examples/line.png"
         line_sim = "./examples/line_simplify.png"
-        trappedball_2pass_exp(line, line_sim)
+        # trappedball_2pass_exp(line, line_sim)
+        region_get_map(line_sim, 
+                path_to_line_artist=line,
+                output_path='./', 
+                radius_set=[1],
+                percentiles=[0], 
+                visualize_steps=False,
+                return_numpy=False)
     else:
         in_path = "./flatting/size_2048/line_detection_croped"
         out_path = "./exp4"

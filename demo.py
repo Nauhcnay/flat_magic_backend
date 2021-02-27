@@ -128,21 +128,14 @@ def pred_and_fill(img, op, radius, patch, nets, outputs="./flatting/gradio"):
 
         edge = Image.fromarray(merge_to_1(edges))
 
-    # img.save(outs[0])
-
     print("Log:\ttrapping ball filling with radius %s"%radius)
     fill, fill_pred, fill_artist, fill_final = region_get_map(edge.convert("L"),
-                                                # output_png=(outputs,op),
                                                 output_png=None,
                                                 radius_set=[int(radius)], percentiles=[0],
-                                                save_org_size = True,
-                                                path_to_line=img,
+                                                path_to_line_artist=img,
                                                 return_numpy=True)
-    
-    # zips = zip_files(outs)
 
     return edge, fill, fill_pred, fill_artist, fill_final
-    # return edge, fill, fill_pred, fill_line, zips
 
 def initial_models(path_to_ckpt):
 
@@ -233,8 +226,8 @@ def main():
     for file in example_list:
         print("find %s"%file)
         img = os.path.join(example_path, file)
-        model = random.choice(["1024", "512"])
-        radius = 1
+        model = random.choice(["512_rand"])
+        radius = 2
         examples.append((img, model, radius))
 
     # initial pred func
@@ -273,5 +266,5 @@ def debug():
     pred_and_fill(img, radius=2, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    main()
-    # debug()
+    # main()
+    debug()
