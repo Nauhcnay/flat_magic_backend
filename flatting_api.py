@@ -99,9 +99,9 @@ def init_palette(color_num = 100):
 def run_single(line_artist, net, radius, preview=False):
     '''
     Given:
-        line_artst, the line art drawn by aritst, 
+        line_artst, the line art drawn by artist, 
             it should be a binary image, contains paint storkes only
-        nets, the trained U-net to simplify aritst line
+        nets, the trained U-net to simplify artist line
         radius, the trapped ball filling radius
         preview, return the coarse preview result, 
             this option will be much faster than getting the full results
@@ -110,7 +110,7 @@ def run_single(line_artist, net, radius, preview=False):
             it comes from the combination o ftrapped ball filling on 
             simplified line and connected component filling on artist line
         fill, the colored fill_map
-        fill_map_artist, the connect component fill map on aritst line
+        fill_map_artist, the connect component fill map on artist line
             it usually contain much more splited regions than fill_map
         fill_artist, the colored fill_map_artist
     '''
@@ -118,7 +118,7 @@ def run_single(line_artist, net, radius, preview=False):
     if str(nets[net][1]) == 'cpu':
         print("Warning:\tno gpu found, using cpu mode, the inference may be slow")
     
-    print("Log:\tsimplify aritst line")
+    print("Log:\tsimplify artist line")
     size = int(net.split("_")[0])
     line_simplify = predict_img(net=nets[net][0],
                        full_img=line_artist,
@@ -150,8 +150,17 @@ def run_single(line_artist, net, radius, preview=False):
     layers = get_layers(fill_map)
     layers_artist = get_layers(fill_map_artist)
 
-    return fill, fill_map, layers, fill_artist, fill_map_artist, layers_artist
+    ## np.array([[0,1], [1,2]]).tolist() -> [[0,1], [1,2]]
+    ## base64.encode( Image.fromarray( fill ).save( format = PNG, io.ByteIO ) )
 
+    return {
+        'fill_color': fill,
+        'fill_integer': fill_map,
+        'layers': layers,
+        'line_artist_components_color': fill_artist,
+        'line_artist_components_integer': fill_map_artist,
+        'line_artist_layers': layers_artist
+        }
 
 def run_multiple(line_artist_list, net_list, radius_list, preview=False):
     '''
@@ -180,14 +189,23 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
         else:
             results = run_single(line_artist_list[i], net_list[i], radius_list[i])
 
-            fill_list.append(results[0])
-            fill_map_list.append(results[1])
-            layers_list.append(results[2])
-            fill_artist_list.append(results[3])
-            fill_map_artist_list.append(results[4])
-            layers_artist_list.append(results[5])
+            fill_list.append(results['fill_color'])
+            fill_map_list.append(results['fill_integer'])
+            layers_list.append(results['layers'])
+            fill_artist_list.append(results['line_artist_components_color'])
+            fill_map_artist_list.append(results['line_artist_components_integer'])
+            layers_artist_list.append(results['line_artist_layers'])
 
-    return fill_list, fill_map_list, layers_list, fill_artist_list, fill_map_artist_list, layers_artist_list
+    # return fill_list, fill_map_list, layers_list, fill_artist_list, fill_map_artist_list, layers_artist_list
+    
+    return {
+        'fill_color': fill_list,
+        'fill_integer': fill_map_list,
+        'layers:' layers_list,
+        'line_artist_components_color': fill_artist_list,
+        'line_artist_components_integer': fill_map_artist_list,
+        'line_artist_layers:' layers_artist_list
+        }
 
 def stroke_to_label(fill_map, stroke_map):
     '''
@@ -229,7 +247,7 @@ def merge(fill_map, merge_map):
         mask = fill_map == r
         fill_map[mask] = max_label
 
-    return None
+    return fill_map
 
 def find_max_region(fill_map, selected_labels):
     '''
@@ -267,7 +285,7 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
     '''
     Given:
         fill_map, labeled final region map 
-        fill_map_artist, labeled region on aritst line only, 
+        fill_map_artist, labeled region on artist line only, 
             this will contain much more regions than the final fill map
         split_map_auto, a image contains split stroke only
     Action:
@@ -293,13 +311,13 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
         fill_map[mask] = next_label
         next_label += 1
 
-    return None
+    return fill_map
 
 def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     '''
     Given:
         fill_map, labeled final region map 
-        fill_map_artist, labeled region on aritst line
+        fill_map_artist, labeled region on artist line
         artist_line, the artist line art
         split_map_manual, a image contains manual split stroke only, it should be precise
     Action:
@@ -334,7 +352,7 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
             fill_map[mask] = next_label
             next_label += 1
 
-    return None
+    return fill_map
 
 def merge_test():
     pass
