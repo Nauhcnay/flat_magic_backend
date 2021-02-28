@@ -12,7 +12,7 @@ from PIL import Image
 
 # global variables shared by all api functions
 color_palette_auto = None
-color_palette_manual = {}
+color_palette_manual = None
 nets = {}
 
 def initail_nets():
@@ -31,7 +31,19 @@ def initail_nets():
 
     return None
 
-def show_fillmap(fill_map):
+def show_fillmap_manual(fill_map):
+    '''
+        Given:
+            fill_map, the labeled region map
+        return:
+            color_map, the random colorized map
+    '''
+    if len(color_palette_manual) is None:
+        raise ValueError("user color palette is not initailized, can't continue process")
+
+    return color_palette_auto[fill_map]
+
+def show_fillmap_auto(fill_map):
     '''
         Given:
             fill_map, the labeled region map
@@ -295,6 +307,17 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
 
     return None
 
+def merge_points(points_list):
+    '''
+    A helper function for merge masks
+    '''
+    for i in range(len(points_list)):
+        points_list[i] = np.array(points_list[i])
+
+    points_merge = np.concatenate(points_list, axis = -1)
+
+    return points_merge
+
 def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     '''
     Given:
@@ -312,20 +335,27 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual)
     
-    # find masks that need to be splited
-    masks = []
+    # create new artist line
     split_artist_line = artist_line[split_map_manual < 125] = 0
+    
+    # merge all involved regions
+    p_list = []
     for r in split_labels:
-        split_single_region = np.ones(fill_map.shape, dtype=np.uint8)
-        split_single_region[fill_map_artist != r] = 0
-        _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
-        regions = np.unique(split_regions)
-        regions = regions[regions != 0]
-        if len(regions) > 1:
-            max_region = find_max_region(split_single_region, regions)
-            for s in regions:
-                if s == max_region: continue
-                masks.append(split_single_region == s)
+        p_list.append(np.where(fill_map == r))
+    merged_mask = merge_points(p_list)
+
+    # split  
+    masks = []
+    split_single_region = np.ones(fill_map.shape, dtype=np.uint8)
+    split_single_region[fill_map_artist != r] = 0
+    _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
+    regions = np.unique(split_regions)
+    regions = regions[regions != 0]
+    if len(regions) > 1:
+        max_region = find_max_region(split_single_region, regions)
+        for s in regions:
+            if s == max_region: continue
+            masks.append(split_single_region == s)
 
     # split regions
     next_label = fill_map.max() + 1
