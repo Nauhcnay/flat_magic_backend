@@ -82,7 +82,8 @@ def region_get_map(path_to_line_sim,
                 radius_set=[3,2,1],
                 percentiles=[90, 0, 0], 
                 visualize_steps=False,
-                return_numpy=False):
+                return_numpy=False, 
+                preview=False):
     '''
     Given:
         the path to input png file
@@ -183,17 +184,18 @@ def region_get_map(path_to_line_sim,
     fillmap_neural_fullsize = cv2.resize(fillmap_neural.astype(np.uint8), 
                                 (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
                                 interpolation = cv2.INTER_NEAREST)
+    fillmap_neural_fullsize = fillmap_neural_fullsize.astype(np.int32)
+    
+    if preview:
+        fill_neural_fullsize[line_artist_fullsize < 125] = 0
+        return fill_neural_fullsize
 
-    # version1, pure filling result
+
     fill_neural = show_fill_map(fillmap_neural)
 
     # version2, filling result overlay simpified line
     fill_neural_line = fill_neural.copy()
     fill_neural_line[line_simplify == 0] = 0
-
-    # version3, filling result overlay down scaled artist line
-    fill_artist_line = fill_neural.copy()
-    fill_artist_line[line_artist == 0] = 0
 
     # version4, up scaled filling result overlay full size artist line
     # this could work, but it is non-trivial
@@ -213,19 +215,22 @@ def region_get_map(path_to_line_sim,
     _, fillmap_artist_fullsize_c = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
 
     print("Log:\tcompute cartesian product")
-    fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy().astype(np.int32)
-    fillmap_neural_fullsize_c[line_artist_fullsize < 125] = 0
-    fillmap_neural_fullsize_c = verify_reigon(fillmap_neural_fullsize_c)
+    fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy()
 
-    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize_c, fillmap_neural_fullsize_c)
+    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
+    fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize)
+
+    fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize_c, fillmap_neural_fullsize)
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
     
     # re-order both fillmaps
     fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize, True)
+    # fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize, True)
+    
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.0002)
+    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize, True)
     
-    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize, fillmap_artist_fullsize, th=0.0001)
-    fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
     fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize)
@@ -236,6 +241,7 @@ def region_get_map(path_to_line_sim,
 
         print("Log:\tsave at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
         cv2.imwrite(os.path.join(output_path, str(name)+"_fill.png"), fill_neural_fullsize)
+        cv2.imwrite(os.path.join(output_path, str(name)+"_neural.png"), fill_neural)
         cv2.imwrite(os.path.join(output_path, str(name)+"_fill_line.png"), 
             show_fill_map(fillmap_artist_fullsize_c))
     
@@ -243,7 +249,7 @@ def region_get_map(path_to_line_sim,
     if return_numpy:
         return fill_neural, fill_neural_line, fill_artist_fullsize, fill_neural_fullsize
     else:
-        return fillmap_neural
+        return fillmap_neural_fullsize, fillmap_neural_fullsize_c, fillmap_artist_fullsize_c
 
 def fillmap_cartesian_product(fill1, fill2):
     '''
@@ -282,14 +288,13 @@ def fillmap_cartesian_product(fill1, fill2):
 
 # verify if there is no isolate sub-region in each reigon, if yes, split it and assign a new region id    
 def verify_reigon(fillmap, reorder_only=False):
-
-    print("Log:\tverfiy regions in fillmap")
     fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
 
     # split region 
     next_label = labels.max() + 1
     if reorder_only == False:
+        print("Log:\tsplit isolate regions in fillmap")
         for r in tqdm(labels):
             if r == 0: continue
             # inital input fill map

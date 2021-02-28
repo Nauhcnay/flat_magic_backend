@@ -130,7 +130,6 @@ def pred_and_fill(img, op, radius, patch, nets, outputs="./flatting/gradio"):
 
     print("Log:\ttrapping ball filling with radius %s"%radius)
     fill, fill_pred, fill_artist, fill_final = region_get_map(edge.convert("L"),
-                                                output_png=None,
                                                 radius_set=[int(radius)], percentiles=[0],
                                                 path_to_line_artist=img,
                                                 return_numpy=True)
@@ -157,7 +156,7 @@ def initial_models(path_to_ckpt):
     net.to(device=device)
     
     # load model
-    print("Log\tload %s"%path_to_ckpt)
+    print("Log:\tload %s"%path_to_ckpt)
     try:
         net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
     except:
