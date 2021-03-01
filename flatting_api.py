@@ -560,11 +560,9 @@ if __name__ == "__main__":
     '''
     test for merge
     '''
-    # test_case1()
+    test_case1()
     
     '''
     test for auto split and manual split
     '''
     test_case2()
-
-    print("Done")
