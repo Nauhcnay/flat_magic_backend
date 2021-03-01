@@ -391,7 +391,7 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
 
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual)
-    if len(split_labels) <= 1:
+    if len(split_labels) == 0:
         print("Log:\t(probably) inaccurate input, skip split manual")
         return fill_map
 
@@ -512,6 +512,13 @@ def test_case2():
     Image.fromarray(fill).show()
     os.system("pause")    
 
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test03.png").convert("L"))
+    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")    
+
     # merge
     merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test01.png").convert("L"))
     fill_map = merge(fill_map, merge_map)
@@ -548,7 +555,7 @@ def save_np(array, path):
 
 def load_np(path):
     '''
-    A helper function to save numpy array, for debug purpose
+    A helper function to load numpy array, for debug purpose
     '''
     print('Log:\tload %s'%path)
     with open(path, 'rb') as f:
