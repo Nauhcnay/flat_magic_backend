@@ -268,7 +268,7 @@ def merge(fill_map, merge_map):
     '''
     # get labels selected by merge stroke
     merge_labels = stroke_to_label(fill_map, merge_map)
-    if len(merge_labels) <= 2:
+    if len(merge_labels) <= 1:
         print("Log:\t(probably) inaccurate input, skip merge")
         return fill_map
 
@@ -336,7 +336,7 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
     '''
     # select regions that user want to split
     split_labels_artist = stroke_to_label(fill_map_artist, split_map_auto)
-    if len(split_labels_artist) <= 2:
+    if len(split_labels_artist) <= 1:
         print("Log:\t(probably) inaccurate input, skip split auto")
         return fill_map
 
@@ -391,7 +391,7 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
 
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual)
-    if len(split_labels) <= 2:
+    if len(split_labels) <= 1:
         print("Log:\t(probably) inaccurate input, skip split manual")
         return fill_map
 
