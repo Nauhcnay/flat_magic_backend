@@ -38,4 +38,6 @@ To repeat this test case, please download the [test input](https://drive.google.
 
 `unzip examples.zip`
 
+ `cd ..`
+ 
  `python faltting_api.py`
