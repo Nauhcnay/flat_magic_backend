@@ -242,8 +242,8 @@ def stroke_to_label(fill_map, stroke_map):
     if len(stroke_map.shape) == 3:
         stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
     stroke_map = stroke_map.copy()
-    stroke_map[stroke_map < 125] = 0
-    stroke_map[stroke_map >= 125] = 1
+    stroke_map[stroke_map < 240] = 0
+    stroke_map[stroke_map >= 240] = 1
 
     # get the labels selected by stroke map
     labels = np.unique(fill_map[stroke_map == 0])
@@ -388,7 +388,7 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     
     # merge user modify to artistline
     artist_line_new = artist_line.copy()
-    artist_line_new[split_map_manual < 125] = 0
+    artist_line_new[split_map_manual < 240] = 0
     
     # merge all involved regions
     p_list = []
@@ -401,7 +401,7 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     masks = []
     split_single_region = np.zeros(fill_map.shape, dtype=np.uint8)
     split_single_region[merged_mask] = 1
-    split_single_region[artist_line_new < 125] = 0
+    split_single_region[artist_line_new < 240] = 0
     _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
     regions = np.unique(split_regions)
     regions = regions[regions != 0]
@@ -420,8 +420,8 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
             fill_map[mask] = next_label
             next_label += 1
     fill_map[mask_old] = label_old
-    fill_map[split_map_manual < 125] = label_old
-    fill_map[artist_line < 125] = 0
+    fill_map[split_map_manual < 240] = label_old
+    fill_map[artist_line < 240] = 0
 
     return fill_map
 
