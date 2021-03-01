@@ -32,7 +32,7 @@ Then run:
 `python run.py --exp4`
 
 ### Interactive color filling test case
-To repeat this test case, please download the test input[test input](https://drive.google.com/file/d/1wVB4zPOWiVXmSwItq1Dq1px2zdobZsfB/view?usp=sharing) and put it into ./trapped_ball, then:
+To repeat this test case, please download the [test input](https://drive.google.com/file/d/1wVB4zPOWiVXmSwItq1Dq1px2zdobZsfB/view?usp=sharing) and put it into ./trapped_ball, then:
 
 `cd trapped_ball`
 `unzip examples.zip`
