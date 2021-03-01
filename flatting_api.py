@@ -1,4 +1,3 @@
-# global variable as palette
 import os, sys
 import numpy as np
 import cv2
@@ -19,17 +18,20 @@ def initail_nets():
     '''
         Load trained U-Net models to nets
     '''
-    path_1024 = "./checkpoints/rand_1024/"
-    path_1024_base = "./checkpoints/base_1024/"
-    path_512_base = "./checkpoints/base_512/"
-    path_512 = "./checkpoints/rand_512/CP_epoch1201.pth"
-    nets["1024"] = initial_models(path_1024)
-    nets["1024_base"] = initial_models(path_1024_base)
+    try:
+        path_1024 = "./checkpoints/rand_1024/"
+        path_1024_base = "./checkpoints/base_1024/"
+        path_512_base = "./checkpoints/base_512/"
+        path_512 = "./checkpoints/rand_512/CP_epoch1201.pth"
+        nets["1024"] = initial_models(path_1024)
+        nets["1024_base"] = initial_models(path_1024_base)
 
-    nets["512"] = initial_models(path_512)
-    nets["512_base"] = initial_models(path_512_base)
+        nets["512"] = initial_models(path_512)
+        nets["512_base"] = initial_models(path_512_base)
 
-    return None
+        return {'states': True}
+    except:
+        return {'states': False}
 
 def show_fillmap_manual(fill_map):
     '''
@@ -60,7 +62,7 @@ def show_fillmap_auto(fill_map):
 
     return color_palette_auto[fill_map]
 
-def drop_small_regions(fill_map, th=0.00002):
+def drop_small_regions(fill_map, th=0.000005):
     h, w = fill_map.shape
     th = int(h*w*th)
     labels = np.unique(fill_map)
@@ -153,10 +155,10 @@ def run_single(line_artist, net, radius, preview=False):
                                                     )
 
     # color fill map for visualize
-    fill = show_fillmap(fill_map)
+    fill = show_fillmap_auto(fill_map)
     drop_small_regions(fill_map_artist)
     fill_map_artist = verify_reigon(fill_map_artist, True)
-    fill_artist = show_fillmap(fill_map_artist)
+    fill_artist = show_fillmap_auto(fill_map_artist)
 
     # get layers
     layers = get_layers(fill_map)
@@ -165,13 +167,22 @@ def run_single(line_artist, net, radius, preview=False):
     ## np.array([[0,1], [1,2]]).tolist() -> [[0,1], [1,2]]
     ## base64.encode( Image.fromarray( fill ).save( format = PNG, io.ByteIO ) )
 
+    # return {
+    #     'fill_color': fill.tolist(),
+    #     'fill_integer': fill_map.tolist(),
+    #     'layers': layers.tolist(),
+    #     'components_color': fill_artist.tolist(),
+    #     'components_integer': fill_map_artist.tolist(),
+    #     'components_layers': layers_artist.tolist()
+    #     }
+
     return {
         'fill_color': fill,
         'fill_integer': fill_map,
         'layers': layers,
-        'line_artist_components_color': fill_artist,
-        'line_artist_components_integer': fill_map_artist,
-        'line_artist_layers': layers_artist
+        'components_color': fill_artist,
+        'components_integer': fill_map_artist,
+        'components_layers': layers_artist
         }
 
 def run_multiple(line_artist_list, net_list, radius_list, preview=False):
@@ -204,19 +215,19 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
             fill_list.append(results['fill_color'])
             fill_map_list.append(results['fill_integer'])
             layers_list.append(results['layers'])
-            fill_artist_list.append(results['line_artist_components_color'])
-            fill_map_artist_list.append(results['line_artist_components_integer'])
-            layers_artist_list.append(results['line_artist_layers'])
+            fill_artist_list.append(results['components_color'])
+            fill_map_artist_list.append(results['components_integer'])
+            layers_artist_list.append(results['components_layers'])
 
     # return fill_list, fill_map_list, layers_list, fill_artist_list, fill_map_artist_list, layers_artist_list
     
     return {
         'fill_color': fill_list,
         'fill_integer': fill_map_list,
-        'layers:' layers_list,
-        'line_artist_components_color': fill_artist_list,
-        'line_artist_components_integer': fill_map_artist_list,
-        'line_artist_layers:' layers_artist_list
+        'layers': layers_list,
+        'components_color': fill_artist_list,
+        'components_integer': fill_map_artist_list,
+        'components_layers': layers_artist_list
         }
 
 def stroke_to_label(fill_map, stroke_map):
@@ -230,14 +241,22 @@ def stroke_to_label(fill_map, stroke_map):
     # threshold the stroke map
     if len(stroke_map.shape) == 3:
         stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
-    stroke_map[stroke_map < 125] = False
-    stroke_map[stroke_map >= 125] = True
+    stroke_map = stroke_map.copy()
+    stroke_map[stroke_map < 125] = 0
+    stroke_map[stroke_map >= 125] = 1
 
     # get the labels selected by stroke map
-    labels = np.unique(fill_map[stroke_map])
+    labels = np.unique(fill_map[stroke_map == 0])
     labels = labels[labels != 0]
 
     return labels
+
+def display_region(fill_map, region):
+    '''
+    A helper function that visualize a given region
+    '''
+    r = (fill_map == region).astype(np.uint8)*255
+    Image.fromarray(r).show()
 
 def merge(fill_map, merge_map):
     '''
@@ -260,6 +279,15 @@ def merge(fill_map, merge_map):
         fill_map[mask] = max_label
 
     return fill_map
+
+def find_region(fill_map, mask):
+    '''
+    A helper function to find the most possible region in mask
+    '''
+    labels, count = np.unique(fill_map[mask], return_counts=True)
+    labels = labels[labels != 0]
+
+    return labels[np.argsort(count)[-1]]
 
 def find_max_region(fill_map, selected_labels):
     '''
@@ -284,7 +312,7 @@ def find_max_region(fill_map, selected_labels):
 def is_split_safe(fill_map, mask, th=0.9):
     '''
     A helper function that to test if the given region could be splited safely
-        if the major region in the given mask less than th% of mask area (size)
+        if the major region in the given have less than th% of mask area (size)
         then it should not be splited.
     '''
     labels, counts = np.unique(fill_map[mask], return_counts=True)
@@ -305,20 +333,25 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
     '''
     # select regions that user want to split
     split_labels_artist = stroke_to_label(fill_map_artist, split_map_auto)
-    split_label = stroke_to_label(fill_map, split_map_auto)
-    # everytime we will just split one region
-    if len(split_label) > 1:
-        # select the region with max areas
-        split_label = find_max_region(fill_map, split_label)
-
-    # find out the region that don't needs to be split
-    assert len(split_labels_artist) > 1
-    fixed_region = find_max_region(fill_map_artist, split_labels_artist)
+    
+    # find out the region that don't needs to be extract
+    neural_to_artist = {} # map from fill_map to fill_map_artist
+    for r in split_labels_artist:
+        rn = np.unique(fill_map[fill_map_artist == r])
+        for s in rn:
+            if s in neural_to_artist:
+                neural_to_artist[s].append(r)
+            else:
+                neural_to_artist[s] = [r]
+    fixed_region = []
+    for s in neural_to_artist.values():
+        if len(s) > 1:
+            fixed_region.append(find_max_region(fill_map_artist, s))
 
     # split rest regions
     next_label = np.max(fill_map) + 1
     for r in split_labels_artist:
-        if r == fixed_region: continue
+        if r in fixed_region: continue
         mask = fill_map_artist == r
         fill_map[mask] = next_label
         next_label += 1
@@ -334,7 +367,7 @@ def merge_points(points_list):
 
     points_merge = np.concatenate(points_list, axis = -1)
 
-    return points_merge
+    return tuple(points_merge)
 
 def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     '''
@@ -353,27 +386,32 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual)
     
-    # create new artist line
-    split_artist_line = artist_line[split_map_manual < 125] = 0
+    # merge user modify to artistline
+    artist_line_new = artist_line.copy()
+    artist_line_new[split_map_manual < 125] = 0
     
     # merge all involved regions
     p_list = []
     for r in split_labels:
-        p_list.append(np.where(fill_map == r))
+        p_list.append(np.where(fill_map_artist == r))
     merged_mask = merge_points(p_list)
+    label_old = find_region(fill_map, merged_mask)
 
     # split  
     masks = []
-    split_single_region = np.ones(fill_map.shape, dtype=np.uint8)
-    split_single_region[fill_map_artist != r] = 0
+    split_single_region = np.zeros(fill_map.shape, dtype=np.uint8)
+    split_single_region[merged_mask] = 1
+    split_single_region[artist_line_new < 125] = 0
     _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
     regions = np.unique(split_regions)
     regions = regions[regions != 0]
     if len(regions) > 1:
-        max_region = find_max_region(split_single_region, regions)
+        max_region = find_max_region(split_regions, regions)
         for s in regions:
-            if s == max_region: continue
-            masks.append(split_single_region == s)
+            if s == max_region: 
+                mask_old = split_regions == s
+            else:
+                masks.append(split_regions == s)
 
     # split regions
     next_label = fill_map.max() + 1
@@ -381,24 +419,152 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
         if is_split_safe(fill_map, mask):
             fill_map[mask] = next_label
             next_label += 1
+    fill_map[mask_old] = label_old
+    fill_map[split_map_manual < 125] = label_old
+    fill_map[artist_line < 125] = 0
 
     return fill_map
 
-def merge_test():
-    pass
+def test_case1():
+    import os
+    
+    fill_map = load_np("./trapped_ball/examples/01_fill_integer.npy")
+    fill_map_artist = load_np("./trapped_ball/examples/01_components_integer.npy")
+    
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test01.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
 
-def split_auto_test():
-    pass
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test02.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
 
-def split_manual_test():
-    pass
+    # split_auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/01_split_auto_test01.png").convert("L"))
+    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test03.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test04.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    print("Done")
+
+def test_case2():
+    import os
+    
+    fill_map = load_np("./trapped_ball/examples/02_fill_integer.npy")
+    fill_map_artist = load_np("./trapped_ball/examples/02_components_integer.npy")
+    artist_line = np.array(Image.open("./trapped_ball/examples/02.png").convert("L"))
+
+    # split manual
+    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test01.png").convert("L"))
+    fill_map = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split manual
+    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test02.png").convert("L"))
+    fill_map = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test01.png").convert("L"))
+    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test02.png").convert("L"))
+    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")    
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test01.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test02.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test03.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test04.png").convert("L"))
+    fill_map = merge(fill_map, merge_map)
+    fill = show_fillmap_auto(fill_map)
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    print("Done")
+
+def save_np(array, path):
+    '''
+    A helper function to save numpy array, for debug purpose
+    '''
+    with open(path, 'wb') as f:
+        np.save(f, array)
+
+def load_np(path):
+    '''
+    A helper function to save numpy array, for debug purpose
+    '''
+    print('Log:\tload %s'%path)
+    with open(path, 'rb') as f:
+        result = np.load(f)
+    return result
 
 # for debug
 if __name__ == "__main__":
-    line_path = "./trapped_ball/examples/02.png"
-    line_artist = Image.open(line_path).convert("L")
+    
+    '''
+    test for initial work flow
+    '''
+    # line_path = "./trapped_ball/examples/02.png"
+    # line_artist = Image.open(line_path).convert("L")
+    # initail_nets()
+    # results = run_single(line_artist, "512", 1)
+    
+    '''
+    test for merge
+    '''
+    # test_case1()
+    
+    '''
+    test for auto split and manual split
+    '''
+    test_case2()
 
-    initail_nets()
-
-    results = run_single(line_artist, "512_base", 1)
     print("Done")
