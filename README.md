@@ -32,29 +32,29 @@ A client could call this to reload the up-to-date models.
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/flatsingle`, it should contain:
 
-  `data["image"]`, a base64 encoded png format image as the input artist line art
+>  `data["image"]`, a base64 encoded png format image as the input artist line art
 
-  `data["net"]`, a string in `("512", "512_base", "1024", "1024_base")` as the name of neural models
+>  `data["net"]`, a string in `("512", "512_base", "1024", "1024_base")` as the name of neural models
 
-  `data["radius"]`, a int as the radius parameter for trapped ball filling
+>  `data["radius"]`, a int as the radius parameter for trapped ball filling
 
-  `data["preview"]`, a bool to indicate if use preview mode, in this mode, the API will only return a rough filling result in result["image"] (Of course it will be much faster)
+>  `data["preview"]`, a bool to indicate if use preview mode, in this mode, the API will only return a rough filling result in result["image"] (Of course it will be much faster)
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
-  `result['image']`, a base64 encoded png format image as the output filling result
+>  `result['image']`, a base64 encoded png format image as the output filling result
 
-  `result['fillmap']`, a 2D list as labelled fill map 
+>  `result['fillmap']`, a 2D list as labelled fill map 
 
-  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map
+>  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map
 
-  `result['image_c']`, a base64 encoded png format image as the output component filling result
+>  `result['image_c']`, a base64 encoded png format image as the output component filling result
 
-  `result['fillmap_c']`, a 2D list as labelled component fill map 
+>  `result['fillmap_c']`, a 2D list as labelled component fill map 
 
-  `result['layers_c']`, a list which contains base64 encoded png image for each individual region in the component fill map
+>  `result['layers_c']`, a list which contains base64 encoded png image for each individual region in the component fill map
 
-  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 2. get filling results on multiple images
 
@@ -66,21 +66,21 @@ Then the API will return a ptyhon dictionary `result` in JSON. Similarly, the di
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/flatsingle`, it should contain:
 
-  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
 
-  `data["stroke"]`, a base64 encoded png format image as the user input merge stroke (the stroke could be any color, but the background should always be white)
+>  `data["stroke"]`, a base64 encoded png format image as the user input merge stroke (the stroke could be any color, but the background should always be white)
 
-  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
-  `result['image']`, a base64 encoded png format image as the output filling result after merge
+>  `result['image']`, a base64 encoded png format image as the output filling result after merge
 
-  `result['fillmap']`, a 2D list as labelled fill map after merge
+>  `result['fillmap']`, a 2D list as labelled fill map after merge
 
-  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after merge
+>  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after merge
 
-  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 ### 4. Split filling regions
 
