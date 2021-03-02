@@ -88,45 +88,45 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/splitauto`, it should contain:
 
-  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
   
-  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
+>  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
 
-  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
+>  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
 
-  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
-  `result['image']`, a base64 encoded png format image as the output filling result after split
+>  `result['image']`, a base64 encoded png format image as the output filling result after split
 
-  `result['fillmap']`, a 2D list as labelled fill map after split
+>  `result['fillmap']`, a 2D list as labelled fill map after split
 
-  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after split
+>  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after split
 
-  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
   
 2. Manual split
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/split_manual`, it should contain:
 
-  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
   
-  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
+>  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
 
-  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
+>  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
 
-  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
-  `result['image']`, a base64 encoded png format image as the output filling result after split
+>  `result['image']`, a base64 encoded png format image as the output filling result after split
 
-  `result['fillmap']`, a 2D list as labelled fill map after split
+>  `result['fillmap']`, a 2D list as labelled fill map after split
 
-  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after split
+>  `result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map after split
 
-  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
+>  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 
 ## Test case
