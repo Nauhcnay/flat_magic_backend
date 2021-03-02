@@ -10,105 +10,29 @@ from demo import initial_models
 from PIL import Image
 
 # global variables shared by all api functions
-color_palette_auto = None
-color_palette_manual = None
 nets = {}
 
-def initail_nets():
+def initail_nets(force_refresh=False):
     '''
         Load trained U-Net models to nets
     '''
+    global nets
+
     try:
-        path_1024 = "./checkpoints/rand_1024/"
-        path_1024_base = "./checkpoints/base_1024/"
-        path_512_base = "./checkpoints/base_512/"
-        path_512 = "./checkpoints/rand_512/CP_epoch1201.pth"
-        nets["1024"] = initial_models(path_1024)
-        nets["1024_base"] = initial_models(path_1024_base)
+        if len(nets) == 0 or force_refresh:
+            path_1024 = "./checkpoints/rand_1024/"
+            path_1024_base = "./checkpoints/base_1024/"
+            path_512_base = "./checkpoints/base_512/"
+            path_512 = "./checkpoints/rand_512/"
+            nets["1024"] = initial_models(path_1024)
+            nets["1024_base"] = initial_models(path_1024_base)
 
-        nets["512"] = initial_models(path_512)
-        nets["512_base"] = initial_models(path_512_base)
+            nets["512"] = initial_models(path_512)
+            nets["512_base"] = initial_models(path_512_base)
 
-        return {'states': True}
+        return True
     except:
-        return {'states': False}
-
-def show_fillmap_manual(fill_map):
-    '''
-        Given:
-            fill_map, the labeled region map
-        return:
-            color_map, the random colorized map
-    '''
-    if len(color_palette_manual) is None:
-        raise ValueError("user color palette is not initailized, can't continue process")
-
-    return color_palette_auto[fill_map]
-
-def show_fillmap_auto(fill_map):
-    '''
-        Given:
-            fill_map, the labeled region map
-        return:
-            color_map, the random colorized map
-    '''
-    region_num = np.max(fill_map) + 1
-    if color_palette_auto is None:
-        init_palette()
-
-    if region_num > len(color_palette_auto):
-        print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
-        init_palette(region_num)
-
-    return color_palette_auto[fill_map]
-
-def drop_small_regions(fill_map, th=0.000005):
-    h, w = fill_map.shape
-    th = int(h*w*th)
-    labels = np.unique(fill_map)
-
-    counter = 0
-    for r in labels:
-        mask = fill_map == r
-        if mask.sum() < th:
-            fill_map[mask] = 0
-            counter += 1
-    print("Log:\t%d region that smaller than %d pixels are removed"%(counter, th))
-
-def get_layers(fill_map):
-    '''
-    Given:
-        fill_map, the labeled region map
-    Return:
-        layers, a list of numpy arrays, each array is a single region
-    '''
-    h, w = fill_map.shape
-    layers = []
-
-    labels = np.unique(fill_map)
-    assert np.max(fill_map) + 1 == len(labels)
-    assert len(labels) <= len(color_palette_auto)
-
-    for region in labels:
-
-        layer = np.ones((h, w, 3), dtype=np.uint8) * 255
-        mask = fill_map == region
-        layer[mask] = color_palette_auto[region]
-        layers.append(layer)
-
-    return layers
-
-def init_palette(color_num = 100):
-    '''
-    Initialize the auto color palette, assume there will be no more than 500 regions
-    If we get a fill map more than 100 regions, then we need to re-initialize this with larger number
-    '''
-    global color_palette_auto
-    color_palette_auto = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
-    color_palette_auto[0] = [0, 0, 0]
-
-    return None
-
+        return False
 
 def run_single(line_artist, net, radius, preview=False):
     '''
@@ -128,6 +52,9 @@ def run_single(line_artist, net, radius, preview=False):
             it usually contain much more splited regions than fill_map
         fill_artist, the colored fill_map_artist
     '''
+    assert initail_nets()
+    global nets
+
     # simplify artist line
     if str(nets[net][1]) == 'cpu':
         print("Warning:\tno gpu found, using cpu mode, the inference may be slow")
@@ -155,11 +82,11 @@ def run_single(line_artist, net, radius, preview=False):
                                                     )
 
     # color fill map for visualize
-    fill = show_fillmap_auto(fill_map)
     drop_small_regions(fill_map_artist)
     fill_map_artist = verify_reigon(fill_map_artist, True)
-    fill_artist = show_fillmap_auto(fill_map_artist)
+    fill_artist, palette = show_fillmap_auto(fill_map_artist)
 
+    fill, palette = show_fillmap_auto(fill_map, palette)
     # get layers
     layers = get_layers(fill_map)
     layers_artist = get_layers(fill_map_artist)
@@ -173,7 +100,8 @@ def run_single(line_artist, net, radius, preview=False):
     #     'layers': layers.tolist(),
     #     'components_color': fill_artist.tolist(),
     #     'components_integer': fill_map_artist.tolist(),
-    #     'components_layers': layers_artist.tolist()
+    #     'components_layers': layers_artist.tolist(),
+    #     'palette': palette.tolist()
     #     }
 
     return {
@@ -182,7 +110,8 @@ def run_single(line_artist, net, radius, preview=False):
         'layers': layers,
         'components_color': fill_artist,
         'components_integer': fill_map_artist,
-        'components_layers': layers_artist
+        'components_layers': layers_artist,
+        'palette': palette
         }
 
 def run_multiple(line_artist_list, net_list, radius_list, preview=False):
@@ -203,10 +132,11 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
     fill_artist_list = []
     fill_map_artist_list = []
     layers_artist_list = []
+    palette_list = []
 
     for i in range(len(line_artist_list)):
         if preview:
-            result = run_single(line_artist_list[i], net_list[i], radius_list[i], True)
+            result = run_single(line_artist_list[i], net_list[i], radius_list[i], preview=True)
             fill_list.append(result)
 
         else:
@@ -218,8 +148,7 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
             fill_artist_list.append(results['components_color'])
             fill_map_artist_list.append(results['components_integer'])
             layers_artist_list.append(results['components_layers'])
-
-    # return fill_list, fill_map_list, layers_list, fill_artist_list, fill_map_artist_list, layers_artist_list
+            palette_list.append(results['palette'])
     
     return {
         'fill_color': fill_list,
@@ -230,35 +159,7 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
         'components_layers': layers_artist_list
         }
 
-def stroke_to_label(fill_map, stroke_map):
-    '''
-    Given:
-        fill_map, labeled region map
-        merge_map, a image contains stroke only, assume it is image stored as numpy array
-    Return:
-        the region index of which are selected by stroke map
-    '''
-    # threshold the stroke map
-    if len(stroke_map.shape) == 3:
-        stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
-    stroke_map = stroke_map.copy()
-    stroke_map[stroke_map < 240] = 0
-    stroke_map[stroke_map >= 240] = 1
-
-    # get the labels selected by stroke map
-    labels = np.unique(fill_map[stroke_map == 0])
-    labels = labels[labels != 0]
-
-    return labels
-
-def display_region(fill_map, region):
-    '''
-    A helper function that visualize a given region
-    '''
-    r = (fill_map == region).astype(np.uint8)*255
-    Image.fromarray(r).show()
-
-def merge(fill_map, merge_map):
+def merge(fill_map, merge_map, palette):
     '''
     Given:
         fill_map, labeled region map
@@ -281,50 +182,14 @@ def merge(fill_map, merge_map):
         mask = fill_map == r
         fill_map[mask] = max_label
 
-    return fill_map
+    # visualize fill_map
+    fill, palette = show_fillmap_auto(fill_map, palette)
+    
+    return {"fill_color": fill,
+            "fill_integer": fill_map,
+            "palette": palette}
 
-def find_region(fill_map, mask):
-    '''
-    A helper function to find the most possible region in mask
-    '''
-    labels, count = np.unique(fill_map[mask], return_counts=True)
-    labels = labels[labels != 0]
-
-    return labels[np.argsort(count)[-1]]
-
-def find_max_region(fill_map, selected_labels):
-    '''
-    A helper function to find the label of max region amout selected regions
-    '''
-    # find the size of selected regions
-    labels, counts = np.unique(fill_map, return_counts=True)
-    labels_sorted = labels[np.argsort(counts)]
-
-    max_idx = -1
-    for r in selected_labels:
-        if max_idx == -1:
-            max_idx = np.where(labels_sorted == r)
-        else:
-            cur_idx = np.where(labels_sorted == r)
-            if max_idx < cur_idx:
-                max_idx = cur_idx
-    max_label = labels_sorted[max_idx]
-
-    return max_label
-
-def is_split_safe(fill_map, mask, th=0.9):
-    '''
-    A helper function that to test if the given region could be splited safely
-        if the major region in the given have less than th% of mask area (size)
-        then it should not be splited.
-    '''
-    labels, counts = np.unique(fill_map[mask], return_counts=True)
-    if counts.max() / counts.sum() < th:
-        return False
-    else:
-        return True
-
-def split_auto(fill_map, fill_map_artist, split_map_auto):
+def split_auto(fill_map, fill_map_artist, split_map_auto, palette):
     '''
     Given:
         fill_map, labeled final region map 
@@ -362,20 +227,14 @@ def split_auto(fill_map, fill_map_artist, split_map_auto):
         fill_map[mask] = next_label
         next_label += 1
 
-    return fill_map
+    # visualize fill_map
+    fill, palette = show_fillmap_auto(fill_map, palette)
+    
+    return {"fill_color": fill,
+            "fill_integer": fill_map,
+            "palette": palette}
 
-def merge_points(points_list):
-    '''
-    A helper function for merge masks
-    '''
-    for i in range(len(points_list)):
-        points_list[i] = np.array(points_list[i])
-
-    points_merge = np.concatenate(points_list, axis = -1)
-
-    return tuple(points_merge)
-
-def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
+def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette):
     '''
     Given:
         fill_map, labeled final region map 
@@ -432,119 +291,174 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual):
     fill_map[split_map_manual < 240] = label_old
     fill_map[artist_line < 240] = 0
 
-    return fill_map
-
-def test_case1():
-    import os
+    # visualize fill_map
+    fill, palette = show_fillmap_auto(fill_map, palette)
     
-    fill_map = load_np("./trapped_ball/examples/01_fill_integer.npy")
-    fill_map_artist = load_np("./trapped_ball/examples/01_components_integer.npy")
+    return {"fill_color": fill,
+            "fill_integer": fill_map,
+            "palette": palette}
+
+def show_fillmap_manual(fill_map, palette):
+    '''
+        Given:
+            fill_map, the labeled region map
+        return:
+            color_map, the random colorized map
+    '''
+    region_num = np.max(fill_map) + 1
     
-    # merge
-    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test01.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    if region_num > len(palette):
+        print("Warning:\tfind unmatched fill map and color palette, please stop and debug the server")
+        p_increment = np.random.randint(0, 255, (region_num - len(palette), 3), dtype=np.uint8)
+        palette = np.concatenate((palette, p_increment), axis = 0)
 
-    # merge
-    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test02.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    return palette[fill_map], palette
 
-    # split_auto
-    split_map_auto = np.array(Image.open("./trapped_ball/examples/01_split_auto_test01.png").convert("L"))
-    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
-
-    # merge
-    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test03.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
-
-    # merge
-    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test04.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
-
-    print("Done")
-
-def test_case2():
-    import os
+def show_fillmap_auto(fill_map, palette=None):
+    '''
+    Given:
+        fill_map, the labeled region map
+        palette, the color palette
+    return:
+        color_map, the random colorized map
+    '''
+    region_num = np.max(fill_map) + 1
     
-    fill_map = load_np("./trapped_ball/examples/02_fill_integer.npy")
-    fill_map_artist = load_np("./trapped_ball/examples/02_components_integer.npy")
-    artist_line = np.array(Image.open("./trapped_ball/examples/02.png").convert("L"))
+    if palette is None:
+        palette = init_palette(region_num + 50)
 
-    # split manual
-    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test01.png").convert("L"))
-    fill_map = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    if region_num > len(palette):
+        print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
+        palette = init_palette(region_num)
 
-    # split manual
-    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test02.png").convert("L"))
-    fill_map = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    return palette[fill_map], palette
 
-    # split auto
-    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test01.png").convert("L"))
-    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+def drop_small_regions(fill_map, th=0.000005):
+    h, w = fill_map.shape
+    th = int(h*w*th)
+    labels = np.unique(fill_map)
 
-    # split auto
-    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test02.png").convert("L"))
-    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")    
+    counter = 0
+    for r in labels:
+        mask = fill_map == r
+        if mask.sum() < th:
+            fill_map[mask] = 0
+            counter += 1
+    print("Log:\t%d region that smaller than %d pixels are removed"%(counter, th))
 
-    # split auto
-    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test03.png").convert("L"))
-    fill_map = split_auto(fill_map, fill_map_artist, split_map_auto)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")    
+def get_layers(fill_map):
+    '''
+    Given:
+        fill_map, the labeled region map
+    Return:
+        layers, a list of numpy arrays, each array is a single region
+    '''
+    h, w = fill_map.shape
+    layers = []
 
-    # merge
-    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test01.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    labels = np.unique(fill_map)
+    assert np.max(fill_map) + 1 == len(labels)
+    assert len(labels) <= len(color_palette_auto)
 
-    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test02.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    for region in labels:
 
-    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test03.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+        layer = np.ones((h, w, 3), dtype=np.uint8) * 255
+        mask = fill_map == region
+        layer[mask] = color_palette_auto[region]
+        layers.append(layer)
 
-    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test04.png").convert("L"))
-    fill_map = merge(fill_map, merge_map)
-    fill = show_fillmap_auto(fill_map)
-    Image.fromarray(fill).show()
-    os.system("pause")
+    return layers
 
-    print("Done")
+def init_palette(color_num = 100):
+    '''
+    Initialize the auto color palette, assume there will be no more than 500 regions
+    If we get a fill map more than 100 regions, then we need to re-initialize this with larger number
+    '''
+    
+    palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
+    palette[0] = [0, 0, 0]
+
+    return palette
+
+def stroke_to_label(fill_map, stroke_map):
+    '''
+    Given:
+        fill_map, labeled region map
+        merge_map, a image contains stroke only, assume it is image stored as numpy array
+    Return:
+        the region index of which are selected by stroke map
+    '''
+    # threshold the stroke map
+    if len(stroke_map.shape) == 3:
+        stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
+    stroke_map = stroke_map.copy()
+    stroke_map[stroke_map < 240] = 0
+    stroke_map[stroke_map >= 240] = 1
+
+    # get the labels selected by stroke map
+    labels = np.unique(fill_map[stroke_map == 0])
+    labels = labels[labels != 0]
+
+    return labels
+
+def display_region(fill_map, region):
+    '''
+    A helper function that visualize a given region
+    '''
+    r = (fill_map == region).astype(np.uint8)*255
+    Image.fromarray(r).show()
+
+def find_region(fill_map, mask):
+    '''
+    A helper function to find the most possible region in mask
+    '''
+    labels, count = np.unique(fill_map[mask], return_counts=True)
+    labels = labels[labels != 0]
+
+    return labels[np.argsort(count)[-1]]
+
+def find_max_region(fill_map, selected_labels):
+    '''
+    A helper function to find the label of max region amout selected regions
+    '''
+    # find the size of selected regions
+    labels, counts = np.unique(fill_map, return_counts=True)
+    labels_sorted = labels[np.argsort(counts)]
+
+    max_idx = -1
+    for r in selected_labels:
+        if max_idx == -1:
+            max_idx = np.where(labels_sorted == r)
+        else:
+            cur_idx = np.where(labels_sorted == r)
+            if max_idx < cur_idx:
+                max_idx = cur_idx
+    max_label = labels_sorted[max_idx]
+
+    return max_label
+
+def is_split_safe(fill_map, mask, th=0.9):
+    '''
+    A helper function that to test if the given region could be splited safely
+        if the major region in the given have less than th% of mask area (size)
+        then it should not be splited.
+    '''
+    labels, counts = np.unique(fill_map[mask], return_counts=True)
+    if counts.max() / counts.sum() < th:
+        return False
+    else:
+        return True
+
+def merge_points(points_list):
+    '''
+    A helper function for merge masks
+    '''
+    for i in range(len(points_list)):
+        points_list[i] = np.array(points_list[i])
+
+    points_merge = np.concatenate(points_list, axis = -1)
+
+    return tuple(points_merge)
 
 def save_np(array, path):
     '''
@@ -561,6 +475,120 @@ def load_np(path):
     with open(path, 'rb') as f:
         result = np.load(f)
     return result
+
+def test_case1():
+    import os
+    
+    fill_map = load_np("./trapped_ball/examples/01_fill_integer.npy")
+    fill_map_artist = load_np("./trapped_ball/examples/01_components_integer.npy")
+    palette = init_palette(100)
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test01.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test02.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split_auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/01_split_auto_test01.png").convert("L"))
+    result = split_auto(fill_map, fill_map_artist, split_map_auto, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test03.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/01_merge_test04.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    print("Done")
+
+def test_case2():
+    import os
+    
+    fill_map = load_np("./trapped_ball/examples/02_fill_integer.npy")
+    fill_map_artist = load_np("./trapped_ball/examples/02_components_integer.npy")
+    artist_line = np.array(Image.open("./trapped_ball/examples/02.png").convert("L"))
+    palette = init_palette(100)
+
+    # split manual
+    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test01.png").convert("L"))
+    result = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split manual
+    split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test02.png").convert("L"))
+    result = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test01.png").convert("L"))
+    result = split_auto(fill_map, fill_map_artist, split_map_auto, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test02.png").convert("L"))
+    result = split_auto(fill_map, fill_map_artist, split_map_auto, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")    
+
+    # split auto
+    split_map_auto = np.array(Image.open("./trapped_ball/examples/02_split_auto_test03.png").convert("L"))
+    result = split_auto(fill_map, fill_map_artist, split_map_auto, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")    
+
+    # merge
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test01.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test02.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test03.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    merge_map = np.array(Image.open("./trapped_ball/examples/02_merge_test04.png").convert("L"))
+    result = merge(fill_map, merge_map, palette)
+    fill = result['fill_color']
+    Image.fromarray(fill).show()
+    os.system("pause")
+
+    print("Done")
 
 # for debug
 if __name__ == "__main__":
