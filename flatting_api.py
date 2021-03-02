@@ -1,18 +1,49 @@
 import os, sys
 import numpy as np
 import cv2
+import torch
 
 from os.path import *
 sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 from run import region_get_map, merge_to_ref, verify_reigon
 from predict import predict_img
-from demo import initial_models
+from unet import UNet
 from PIL import Image
 
 # global variables shared by all api functions
 nets = {}
 
-def initail_nets(force_refresh=False):
+def initial_models(path_to_ckpt):
+
+    # find the lastest model
+    ckpt_list = []
+    
+    if ".pth" not in path_to_ckpt:
+        for c in os.listdir(path_to_ckpt):
+            if ".pth" in c:
+                ckpt_list.append(c)
+        ckpt_list.sort()
+        path_to_ckpt = join(path_to_ckpt, ckpt_list[-1])
+
+    assert exists(path_to_ckpt)
+    
+    # init model
+    net = UNet(in_channels=1, out_channels=1, bilinear=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    net.to(device=device)
+    
+    # load model
+    print("Log:\tload %s"%path_to_ckpt)
+    try:
+        net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
+    except:
+        net = torch.nn.DataParallel(net)
+        net.load_state_dict(torch.load(path_to_ckpt, map_location=device))
+    net.eval()
+
+    return net, device
+
+def initial_nets(force_refresh=False):
     '''
         Load trained U-Net models to nets
     '''
@@ -52,7 +83,7 @@ def run_single(line_artist, net, radius, preview=False):
             it usually contain much more splited regions than fill_map
         fill_artist, the colored fill_map_artist
     '''
-    assert initail_nets()
+    assert initial_nets()
     global nets
 
     # simplify artist line
@@ -88,8 +119,8 @@ def run_single(line_artist, net, radius, preview=False):
 
     fill, palette = show_fillmap_auto(fill_map, palette)
     # get layers
-    layers = get_layers(fill_map)
-    layers_artist = get_layers(fill_map_artist)
+    layers = get_layers(fill_map, palette)
+    layers_artist = get_layers(fill_map_artist, palette)
 
     ## np.array([[0,1], [1,2]]).tolist() -> [[0,1], [1,2]]
     ## base64.encode( Image.fromarray( fill ).save( format = PNG, io.ByteIO ) )
@@ -184,9 +215,11 @@ def merge(fill_map, merge_map, palette):
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
+    layers = get_layers(fill_map, palette)
     
     return {"fill_color": fill,
             "fill_integer": fill_map,
+            "layers": layers,
             "palette": palette}
 
 def split_auto(fill_map, fill_map_artist, split_map_auto, palette):
@@ -229,17 +262,19 @@ def split_auto(fill_map, fill_map_artist, split_map_auto, palette):
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
-    
+    layers = get_layers(fill_map, palette)
+
     return {"fill_color": fill,
             "fill_integer": fill_map,
+            "layers": layers,
             "palette": palette}
 
-def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette):
+def split_manual(fill_map, fill_map_artist, split_map_manual, palette):
     '''
     Given:
         fill_map, labeled final region map 
         fill_map_artist, labeled region on artist line
-        artist_line, the artist line art
+        artist_line, the artist line art (this is not necessary!)
         split_map_manual, a image contains manual split stroke only, it should be precise
     Action:
         split new regions into fill_map
@@ -255,6 +290,8 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palet
         return fill_map
 
     # merge user modify to artistline
+    artist_line = np.ones(fill_map.shape, dtype=np.uint8) * 255
+    artist_line[fill_map ==0 ] = 0
     artist_line_new = artist_line.copy()
     artist_line_new[split_map_manual < 240] = 0
     
@@ -293,9 +330,11 @@ def split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palet
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
-    
+    layers = get_layers(fill_map, palette)
+
     return {"fill_color": fill,
             "fill_integer": fill_map,
+            "layers": layers,
             "palette": palette}
 
 def show_fillmap_manual(fill_map, palette):
@@ -312,7 +351,8 @@ def show_fillmap_manual(fill_map, palette):
         p_increment = np.random.randint(0, 255, (region_num - len(palette), 3), dtype=np.uint8)
         palette = np.concatenate((palette, p_increment), axis = 0)
 
-    return palette[fill_map], palette
+    return {"fill_color": palette[fill_map], 
+            "palette": palette}
 
 def show_fillmap_auto(fill_map, palette=None):
     '''
@@ -346,7 +386,7 @@ def drop_small_regions(fill_map, th=0.000005):
             counter += 1
     print("Log:\t%d region that smaller than %d pixels are removed"%(counter, th))
 
-def get_layers(fill_map):
+def get_layers(fill_map, palette):
     '''
     Given:
         fill_map, the labeled region map
@@ -357,14 +397,14 @@ def get_layers(fill_map):
     layers = []
 
     labels = np.unique(fill_map)
-    assert np.max(fill_map) + 1 == len(labels)
-    assert len(labels) <= len(color_palette_auto)
+    # assert np.max(fill_map) + 1 == len(labels)
+    assert len(labels) <= len(palette)
 
     for region in labels:
 
         layer = np.ones((h, w, 3), dtype=np.uint8) * 255
         mask = fill_map == region
-        layer[mask] = color_palette_auto[region]
+        layer[mask] = palette[region]
         layers.append(layer)
 
     return layers
@@ -525,19 +565,19 @@ def test_case2():
     
     fill_map = load_np("./trapped_ball/examples/02_fill_integer.npy")
     fill_map_artist = load_np("./trapped_ball/examples/02_components_integer.npy")
-    artist_line = np.array(Image.open("./trapped_ball/examples/02.png").convert("L"))
+    # artist_line = np.array(Image.open("./trapped_ball/examples/02.png").convert("L"))
     palette = init_palette(100)
 
     # split manual
     split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test01.png").convert("L"))
-    result = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette)
+    result = split_manual(fill_map, fill_map_artist, split_map_manual, palette)
     fill = result['fill_color']
     Image.fromarray(fill).show()
     os.system("pause")
 
     # split manual
     split_map_manual = np.array(Image.open("./trapped_ball/examples/02_split_manual_test02.png").convert("L"))
-    result = split_manual(fill_map, fill_map_artist, artist_line, split_map_manual, palette)
+    result = split_manual(fill_map, fill_map_artist, split_map_manual, palette)
     fill = result['fill_color']
     Image.fromarray(fill).show()
     os.system("pause")
@@ -598,7 +638,7 @@ if __name__ == "__main__":
     '''
     # line_path = "./trapped_ball/examples/02.png"
     # line_artist = Image.open(line_path).convert("L")
-    # initail_nets()
+    # initial_nets()
     # results = run_single(line_artist, "512", 1)
     
     '''
