@@ -17,7 +17,7 @@ And you will need the following modules to trian and test line simplification ne
 - pytorch
 
 
-### 2. Download pretrained models
+### 2. Download pertrained models
 Download the [pertrained network model](https://drive.google.com/file/d/15l3wPO4WbMk0DmqR7reSU1mHzOaaBCfQ/view?usp=sharing) and put it into `./`, then:
 
 `unzip checkpoints.zip`
