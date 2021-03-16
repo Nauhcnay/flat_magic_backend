@@ -92,8 +92,8 @@ async def refreshnet( request ):
 async def merge( request ):
     data = await request.json()
     
-    img = to_pil(data['image'])
-    stroke = to_pil(data['stroke'])
+    img = np.array(to_pil(data['image']))
+    stroke = np.array(to_pil(data['stroke']))
     palette = np.array(data['palette'])
     
     merged = flatting_api.merge(img, stroke, palette)

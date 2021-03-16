@@ -39,17 +39,17 @@ def to_tensor(img):
         )
     return img_t.unsqueeze(0).cuda()
 
-def denormalize(img):
-    # denormalize
-    inv_normalize = T.Normalize( mean=[-1, -1, -1], std=[2, 2, 2])
+# def denormalize(img):
+#     # denormalize
+#     inv_normalize = T.Normalize( mean=[-1, -1, -1], std=[2, 2, 2])
 
-    img_np = inv_normalize(img.repeat(3,1,1))
-    img_np = (img_np * 255).clamp(0, 255)
+#     img_np = inv_normalize(img.repeat(3,1,1))
+#     img_np = (img_np * 255).clamp(0, 255)
     
-    # to numpy
-    img_np = img_np.cpu().numpy().transpose((1,2,0))
+#     # to numpy
+#     img_np = img_np.cpu().numpy().transpose((1,2,0))
     
-    return Image.fromarray(img_np.astype(np.uint8))
+#     return Image.fromarray(img_np.astype(np.uint8))
 
 def zip_files(files):
     with ZipFile("./flatting/gradio/all.zip", 'w') as zipObj:
@@ -129,12 +129,13 @@ def pred_and_fill(img, op, radius, patch, nets, outputs="./flatting/gradio"):
         edge = Image.fromarray(merge_to_1(edges))
 
     print("Log:\ttrapping ball filling with radius %s"%radius)
-    fill, fill_pred, fill_artist, fill_final = region_get_map(edge.convert("L"),
-                                                radius_set=[int(radius)], percentiles=[0],
-                                                path_to_line_artist=img,
-                                                return_numpy=True)
+    fill = region_get_map(edge.convert("L"),
+        radius_set=[int(radius)], percentiles=[0],
+        path_to_line_artist=img,
+        return_numpy=True,
+        preview = True)
 
-    return edge, fill, fill_pred, fill_artist, fill_final
+    return edge, fill
 
 def initial_models(path_to_ckpt):
 
@@ -173,19 +174,16 @@ def initial_flatting_input():
         invert_colors=False, source="upload", label="Input Image",
         type = "pil")
     # resize = gr.inputs.Radio(choices=["1024", "512", "256"], label="Resize")
-    model = gr.inputs.Radio(choices=["1024", "1024_rand", "512", "512_rand","256","256_rand"], label="Model")
+    model = gr.inputs.Radio(choices=["1024", "1024_rand", "512", "512_rand"], label="Model")
     # split = gr.inputs.Radio(choices=["True", "False"], label="Split")
     radius = gr.inputs.Slider(minimum=1, maximum=10, step=1, default=7, label="kernel radius")
     
     # outputs
     out1 = gr.outputs.Image(type='pil', label='line prediction')
     out2 = gr.outputs.Image(type='pil', label='fill')
-    out3 = gr.outputs.Image(type='pil', label='fill with pred')
-    out4 = gr.outputs.Image(type='pil', label='fill artist')
-    out5 = gr.outputs.Image(type='pil', label='fill final')
     # out5 = gr.outputs.File(label="all results")
 
-    return [img, model, radius], [out1, out2, out3, out4, out5]
+    return [img, model, radius], [out1, out2]
     # return [img, resize], [out1, out2, out3, out4, out5]
 
 def start_demo(fn, inputs, outputs, examples):
@@ -198,9 +196,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
     parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/")
-    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
+    # parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
     parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/")
-    parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
+    # parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
     parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/")
     
     args = parser.parse_args()
@@ -211,8 +209,8 @@ def main():
     nets["1024_rand"] = initial_models(args.ckpt_1024_rand)
     nets["512"] = initial_models(args.ckpt_512)
     nets["512_rand"] = initial_models(args.ckpt_512_rand)
-    nets["256"] = initial_models(args.ckpt_256)
-    nets["256_rand"] = initial_models(args.ckpt_256_rand)
+    # nets["256"] = initial_models(args.ckpt_256)
+    # nets["256_rand"] = initial_models(args.ckpt_256_rand)
 
     
     # construct exmaples
@@ -227,7 +225,7 @@ def main():
         img = os.path.join(example_path, file)
         model = random.choice(["512_rand"])
         radius = 2
-        examples.append((img, model, radius))
+        examples.append([img, model, radius])
 
     # initial pred func
     fn = partial(pred_and_fill, nets=nets, patch="False", outputs="./flatting/gradio")
@@ -244,9 +242,9 @@ def debug():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt-1024", type=str, default = "./checkpoints/base_1024/")
     parser.add_argument("--ckpt-512", type=str, default = "./checkpoints/base_512/")
-    parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
+    # parser.add_argument("--ckpt-256", type=str, default = "./checkpoints/base_256/")
     parser.add_argument("--ckpt-512-rand", type=str, default = "./checkpoints/rand_512/")
-    parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
+    # parser.add_argument("--ckpt-256-rand", type=str, default = "./checkpoints/rand_256/")
     parser.add_argument("--ckpt-1024-rand", type=str, default = "./checkpoints/rand_1024/")
     args = parser.parse_args()
 
@@ -256,8 +254,8 @@ def debug():
     nets["1024_rand"] = initial_models(args.ckpt_1024_rand)
     nets["512"] = initial_models(args.ckpt_512)
     nets["512_rand"] = initial_models(args.ckpt_512_rand)
-    nets["256"] = initial_models(args.ckpt_256)
-    nets["256_rand"] = initial_models(args.ckpt_256_rand)
+    # nets["256"] = initial_models(args.ckpt_256)
+    # nets["256_rand"] = initial_models(args.ckpt_256_rand)
     
   
     
@@ -265,5 +263,5 @@ def debug():
     pred_and_fill(img, radius=2, op='512_rand', patch="False", nets=nets, outputs="./flatting/gradio")
 
 if __name__ == '__main__':
-    # main()
-    debug()
+    main()
+    # debug()

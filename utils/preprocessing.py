@@ -79,7 +79,7 @@ def main():
     path_root = "../flatting"
     org = "size_org"
     
-    crop_size = 1024
+    crop_size = 512
     size = "size_%d"%crop_size
 
     path_to_img = join(path_root, org, "line")
@@ -119,7 +119,7 @@ def main():
 
             assert img.shape[:2] == mask.shape[:2]
 
-            if False:
+            if True:
                 cv2.imwrite(join(out_path_img, "%05d.png"%counter), img)
                 cv2.imwrite(join(out_path_mask, "%05d.png"%counter), mask)
             else:

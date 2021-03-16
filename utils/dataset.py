@@ -126,11 +126,11 @@ class BasicDataset(Dataset):
         # line_np = self.crop_img(crop_bbox, line_np)
         # edge_np = self.crop_img(crop_bbox, edge_np)
         
-        line_np, edge_np = self.random_resize([line_np, edge_np])
+        # line_np, edge_np = self.random_resize([line_np, edge_np])
         
         # or threshold by opencv? 
-        _, mask1_np = cv2.threshold(line_np, 220, 255, cv2.THRESH_BINARY)
-        _, mask2_np = cv2.threshold(edge_np, 220, 255, cv2.THRESH_BINARY)
+        _, mask1_np = cv2.threshold(line_np, 125, 255, cv2.THRESH_BINARY)
+        _, mask2_np = cv2.threshold(edge_np, 125, 255, cv2.THRESH_BINARY)
 
         # convert to tensor, and the following process should all be done by cuda
         line = self.to_tensor(line_np)
@@ -165,7 +165,12 @@ class BasicDataset(Dataset):
         return img_np[t:b, l:r]
 
     def random_resize(self, img_np_list):
-        
+        '''
+        Experiment shows that random resize is not working well, so this function is obsoleted and just be left here 
+        as a record. 
+        Don't try random resize in this way, it will not work!
+        Much slower converging speed and not obvious better generalizetion ability
+        '''        
         size = self.crop_size * (1 + np.random.rand()/5)
         
         # if the image is a very long or wide image, then split it before cropping

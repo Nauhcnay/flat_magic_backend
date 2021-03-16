@@ -8,7 +8,7 @@ sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 import numpy as np
 import torch
 import torch.nn.functional as F
-
+import cv2
 
 from PIL import Image
 from torchvision import transforms as T
@@ -34,28 +34,29 @@ def denormalize(img):
     # denormalize
     inv_normalize = T.Normalize( mean=-1, std=2)
 
-    img_np = inv_normalize(img.repeat(3,1,1))
-    img_np = (img_np * 255).clamp(0, 255)
+    img_np = inv_normalize(img.repeat(3,1,1)).clamp(0, 1)
+    img_np = img_np * 255
     
     # to numpy
     img_np = img_np.cpu().numpy().transpose((1,2,0))
     
     return Image.fromarray(img_np.astype(np.uint8))
 
-def to_pil(f, size):
+def to_numpy(f, size):
     
     if type(f) == str:
-        img = Image.open(f).convert("L")
+        img = np.array(Image.open(f).convert("L"))
         
     else:
-        img = f
+        img = np.array(f)
 
-    w, h = img.size
+    h, w = img.shape
     if w > size or h > size:
         ratio = size/w if w > h else size/h
     else:
         ratio = 1
-    return img.resize((int(w*ratio), int(h*ratio)))
+
+    return cv2.resize(img, (int(w*ratio), int(h*ratio)), interpolation=cv2.INTER_AREA)
 
 def predict_img(net,
                 full_img,
@@ -65,7 +66,7 @@ def predict_img(net,
 
     # read image
     print("Log:\tpredict image at size %d"%size)
-    img = to_tensor(to_pil(full_img, size))
+    img = to_tensor(to_numpy(full_img, size))
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 

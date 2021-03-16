@@ -187,30 +187,18 @@ def region_get_map(path_to_line_sim,
     fillmap_neural_fullsize = fillmap_neural_fullsize.astype(np.int32)
     
     if preview:
+        fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
         fill_neural_fullsize[line_artist_fullsize < 125] = 0
-        return fill_neural_fullsize
+        return Image.fromarray(fill_neural_fullsize.astype(np.uint8))
 
 
     fill_neural = show_fill_map(fillmap_neural)
 
-    # version2, filling result overlay simpified line
     fill_neural_line = fill_neural.copy()
     fill_neural_line[line_simplify == 0] = 0
 
-    # version4, up scaled filling result overlay full size artist line
-    # this could work, but it is non-trivial
-    # line_masked_fullsize = generate_masked_line(line_simplify, line_artist, line_artist_fullsize)
-
-    # fillmap_neural_fullsize[line_masked_fullsize < 125] = 0
-    # _, fillmap_neural_fullsize = cv2.connectedComponents(fillmap_neural_fullsize, connectivity=8)
-
-    # version5, correct initail fillmap by maybe sweep line?
-    # let's do it!
     fillmap_artist_fullsize = np.ones(fillmap_neural_fullsize.shape, dtype=np.uint8) * 255
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
-
-    # we need do something more before this step
-    # compute the catesian product of two filled map
     
     _, fillmap_artist_fullsize_c = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
 

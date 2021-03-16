@@ -130,6 +130,7 @@ def train_net(net,
                 '''
                 point number loss
                 the point number of the perdiction and gt should close, too
+                
                 '''
                 loss2 = criterion(
                         ((denormalize(gts)==0).sum()).float(),
