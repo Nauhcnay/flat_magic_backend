@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import logging
 import cv2
-import webp
+# import webp
 
 from os.path import *
 from os import listdir

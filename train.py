@@ -20,8 +20,8 @@ from torchvision import utils
 from PIL import Image
 from io import BytesIO
 
-dir_line = './flatting/size_org/line'
-dir_edge = './flatting/size_org/line_detection'
+dir_line = './flatting/size_512/line_croped'
+dir_edge = './flatting/size_512/line_detection_croped'
 dir_checkpoint = './checkpoints'
 
 def denormalize(img):
@@ -130,7 +130,7 @@ def train_net(net,
                 '''
                 point number loss
                 the point number of the perdiction and gt should close, too
-                
+
                 '''
                 loss2 = criterion(
                         ((denormalize(gts)==0).sum()).float(),
@@ -241,7 +241,7 @@ def get_args():
     parser.add_argument('-e', '--epochs', metavar='E', type=int, default=90000,
                         help='Number of epochs', dest='epochs')
     parser.add_argument('-m', '--multi-gpu', action='store_true')
-    parser.add_argument('-c', '--crop-size', metavar='C', type=int, default=1024,
+    parser.add_argument('-c', '--crop-size', metavar='C', type=int, default=512,
                         help='the size of random cropping')
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=1,
                         help='Batch size', dest='batchsize')
