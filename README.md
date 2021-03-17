@@ -100,7 +100,7 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 ### 3. Merge filling regions
 
-post request should be a python dictionary `data` in JSON send to `ServAdd/flatsingle`, it should contain:
+post request should be a python dictionary `data` in JSON send to `ServAdd/merge`, it should contain:
 
 >  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
 
