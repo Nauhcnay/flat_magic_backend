@@ -6,6 +6,7 @@ import numpy as np
 import flatting_api
 import base64
 import io
+import json
 
 routes = web.RouteTableDef()
 
@@ -40,19 +41,20 @@ async def flatmultiple( request ):
     
     # construct and return the result
     result = {}
+    result['line_simplified'] = [ to_base64(img) for img in flatted["line_simplified"] ]
     result['image'] = [ to_base64(img) for img in flatted['fill_color'] ]
     result['fillmap'] = [fillmap.tolist() for fillmap in flatted['fill_integer'] ]
     # layers would be more complex, but it should bascially same as image
     # may we should let layers generated at client side, that will reduce a lot of computation and transmission time
-    result['layers'] = []
-    for layers in flatted['layers']:
-        result['layers'].append([ to_base64(img) for img in layers ])
+    # result['layers'] = []
+    # for layers in flatted['layers']:
+    #     result['layers'].append([ to_base64(img) for img in layers ])
     
     result['image_c'] = [ to_base64(img) for img in flatted['components_color'] ]
     result['fillmap_c'] = [fillmap_c.tolist()  for fillmap_c in flatted['components_integer'] ]
-    result['layers_c'] = []
-    for layers_c in flatted['components_layers']:
-        result['layers_c'] = [ to_base64(img) for img in layers_c ]
+    # result['layers_c'] = []
+    # for layers_c in flatted['components_layers']:
+    #     result['layers_c'] = [ to_base64(img) for img in layers_c ]
 
     result['palette'] = [palette.tolist() for palette in flatted['palette']]
 
@@ -64,6 +66,9 @@ async def flatmultiple( request ):
 @routes.post('/flatsingle')
 async def flatsingle( request ):
     data = await request.json()
+    data = json.loads(data)
+    
+    # convert to json
     img = to_pil(data['image'])
     net = data['net']
     radii = data['radius']
@@ -72,14 +77,15 @@ async def flatsingle( request ):
     flatted = flatting_api.run_single(img, net, radii, preview)
 
     result = {}
+    result['line_simplified'] = to_base64(flatted['line_simplified'])
     result['image'] = to_base64(flatted['fill_color'])
     result['fillmap'] = flatted['fill_integer'].tolist()
     # layers would be more complex, but it should bascially same as image
-    result['layers'] = [to_base64(img) for img in flatted['layers']]
+    # result['layers'] = [to_base64(img) for img in flatted['layers']]
     
     result['image_c'] = to_base64(flatted['components_color'])
     result['fillmap_c'] = flatted['components_integer'].tolist()
-    result['layers_c'] = [to_base64(img) for img in flatted['components_layers']]
+    # result['layers_c'] = [to_base64(img) for img in flatted['components_layers']]
     result['palette'] = flatted['palette'].tolist()
 
     return web.json_response( result )
@@ -165,15 +171,19 @@ def to_base64(array):
     A helper function to convert numpy array to png in base64 format
     '''
     with io.BytesIO() as output:
-        Image.fromarray(array).save(output, format='png')
-        img = output.getvalue() 
+        if type(array) == np.ndarray:
+            Image.fromarray(array).save(output, format='png')
+        else:
+            array.save(output, format='png')
+        img = output.getvalue()
+    img = base64.encodebytes(img).decode("utf-8")
     return img
 
 def to_pil(byte):
     '''
     A helper function to convert byte png to PIL.Image
     '''
-    byte = base64.decodebytes(byte)
+    byte = base64.b64decode(byte)
     return Image.open(BytesIO(byte))
 
 app = web.Application()

@@ -48,7 +48,7 @@ def to_numpy(f, size):
         img = np.array(Image.open(f).convert("L"))
         
     else:
-        img = np.array(f)
+        img = np.array(f.convert("L"))
 
     h, w = img.shape
     if w > size or h > size:

@@ -112,15 +112,20 @@ def run_single(line_artist, net, radius, preview=False):
                                                     radius_set=[int(radius)], percentiles=[0],
                                                     )
 
+    # resize simplified line to original size
+    line_simplify = line_simplify.resize(line_artist.size)
+    # line_simplify = cv2.resize(line_simplify, line_artist.size, interpolation = cv2.INTER_NEAREST)
+
     # color fill map for visualize
     drop_small_regions(fill_map_artist)
     fill_map_artist = verify_reigon(fill_map_artist, True)
     fill_artist, palette = show_fillmap_auto(fill_map_artist)
 
     fill, palette = show_fillmap_auto(fill_map, palette)
-    # get layers
-    layers = get_layers(fill_map, palette)
-    layers_artist = get_layers(fill_map_artist, palette)
+    
+    # get layers, we don't need layers right now
+    # layers = get_layers(fill_map, palette)
+    # layers_artist = get_layers(fill_map_artist, palette)
 
     ## np.array([[0,1], [1,2]]).tolist() -> [[0,1], [1,2]]
     ## base64.encode( Image.fromarray( fill ).save( format = PNG, io.ByteIO ) )
@@ -136,12 +141,13 @@ def run_single(line_artist, net, radius, preview=False):
     #     }
 
     return {
+        'line_simplified': line_simplify,
         'fill_color': fill,
         'fill_integer': fill_map,
-        'layers': layers,
+        # 'layers': layers,
         'components_color': fill_artist,
         'components_integer': fill_map_artist,
-        'components_layers': layers_artist,
+        # 'components_layers': layers_artist,
         'palette': palette
         }
 
@@ -157,12 +163,13 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
     assert len(line_artist_list) == len(net_list)
     assert len(net_list) == len(radius_list)
 
+    line_sim_list = []
     fill_list = []
     fill_map_list = []
-    layers_list = []
+    # layers_list = []
     fill_artist_list = []
     fill_map_artist_list = []
-    layers_artist_list = []
+    # layers_artist_list = []
     palette_list = []
 
     for i in range(len(line_artist_list)):
@@ -173,21 +180,24 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
         else:
             results = run_single(line_artist_list[i], net_list[i], radius_list[i])
 
+            line_sim_list.append(results['line_simplified'])
             fill_list.append(results['fill_color'])
             fill_map_list.append(results['fill_integer'])
-            layers_list.append(results['layers'])
+            # layers_list.append(results['layers'])
             fill_artist_list.append(results['components_color'])
             fill_map_artist_list.append(results['components_integer'])
-            layers_artist_list.append(results['components_layers'])
+            # layers_artist_list.append(results['components_layers'])
             palette_list.append(results['palette'])
     
     return {
+        'line_simplified': line_sim_list,
         'fill_color': fill_list,
         'fill_integer': fill_map_list,
-        'layers': layers_list,
+        # 'layers': layers_list,
         'components_color': fill_artist_list,
         'components_integer': fill_map_artist_list,
-        'components_layers': layers_artist_list
+        # 'components_layers': layers_artist_list
+        'palettes': palette_list
         }
 
 def merge(fill_map, merge_map, palette):

@@ -164,31 +164,31 @@ class BasicDataset(Dataset):
         t,l,b,r = bbox
         return img_np[t:b, l:r]
 
-    def random_resize(self, img_np_list):
-        '''
-        Experiment shows that random resize is not working well, so this function is obsoleted and just be left here 
-        as a record. 
-        Don't try random resize in this way, it will not work!
-        Much slower converging speed and not obvious better generalizetion ability
-        '''        
-        size = self.crop_size * (1 + np.random.rand()/5)
+    # def random_resize(self, img_np_list):
+    #     '''
+    #     Experiment shows that random resize is not working well, so this function is obsoleted and just be left here 
+    #     as a record. 
+    #     Don't try random resize in this way, it will not work!
+    #     Much slower converging speed and not obvious better generalizetion ability
+    #     '''        
+    #     size = self.crop_size * (1 + np.random.rand()/5)
         
-        # if the image is a very long or wide image, then split it before cropping
-        img_np_resize_list = []
-        for img_np in img_np_list:
-            if len(img_np.shape) == 2:
-                h, w = img_np.shape
-            else:
-                h, w, _ = img_np.shape
+    #     # if the image is a very long or wide image, then split it before cropping
+    #     img_np_resize_list = []
+    #     for img_np in img_np_list:
+    #         if len(img_np.shape) == 2:
+    #             h, w = img_np.shape
+    #         else:
+    #             h, w, _ = img_np.shape
             
-            short_side = w if w < h else h
-            r = size / short_side
-            target_w = int(w*r+0.5)
-            target_h = int(h*r+0.5)
-            img_np = cv2.resize(img_np, (target_w, target_h), interpolation=cv2.INTER_AREA)
-            img_np_resize_list.append(img_np)
+    #         short_side = w if w < h else h
+    #         r = size / short_side
+    #         target_w = int(w*r+0.5)
+    #         target_h = int(h*r+0.5)
+    #         img_np = cv2.resize(img_np, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    #         img_np_resize_list.append(img_np)
 
-        return img_np_resize_list
+    #     return img_np_resize_list
     
     def to_tensor(self, pil_img, normalize = True):
 
