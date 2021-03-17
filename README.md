@@ -74,8 +74,6 @@ post request should be a python dictionary `data` in JSON send to `ServAdd/flatm
 
 2.1 **Input**
 
-post request should be a python dictionary `data` in JSON send to `ServAdd/flatsingle`, it should contain:
-
 >  `data["image"]`, a list of base64 encoded png format images as the input artist line art
 
 >  `data["net"]`, a list of strings as `512` to indicate the name of neural model
