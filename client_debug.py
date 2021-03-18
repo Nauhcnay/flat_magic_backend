@@ -3,14 +3,15 @@ import requests
 import base64
 import io
 import json
+import os
 
 from os.path import *
-from server import to_pil
 from io import BytesIO
 from PIL import Image
 
 url = "http://jixuanzhi.asuscomm.com:8080/"
 image = "./trapped_ball/examples/01.png"
+# image = "test1.png"
 run_single_test = "flatsingle"
 run_multi_test = "flatmultiple"
 merge_test = "merge"
@@ -34,9 +35,24 @@ def test_case1():
     result = requests.post(url+run_single_test, json = json.dumps(data))
     if result.status_code == 200:
         result = result.json()
-    line_sim = to_pil(result['line_simplified'])
-    line_sim.show()
+        import pdb
+        pdb.set_trace()
+        line_sim = to_pil(result['line_artist'])
+        line_sim.show()
+        os.system("pause")
+        
+        line_sim = to_pil(result['image'])
+        line_sim.show()
+        os.system("pause")
+        line_sim = to_pil(result['image_c'])
+        line_sim.show()
+        os.system("pause")
+        line_sim = to_pil(result['line_simplified'])
+        line_sim.show()
+        os.system("pause")
 
+    else:
+        raise ValueError("Test failed")
 
     print("Done")
 

@@ -25,7 +25,8 @@ async def flatmultiple( request ):
     # I guess data is python object already
     # this may similar to json.loads()
     data = await request.json()
-    
+    data = json.loads(data)
+
     # convert data to function input
     # img should be a PIL.Image
     # net should be string
@@ -66,17 +67,21 @@ async def flatmultiple( request ):
 @routes.post('/flatsingle')
 async def flatsingle( request ):
     data = await request.json()
-    data = json.loads(data)
+    try:
+        data = json.loads(data)
+    except:
+        print("got dict directly")
     
     # convert to json
     img = to_pil(data['image'])
-    net = data['net']
-    radii = data['radius']
+    net = str(data['net'])
+    radii = int(data['radius'])
     preview = data['preview']
 
     flatted = flatting_api.run_single(img, net, radii, preview)
 
     result = {}
+    result['line_artist'] = to_base64(flatted['line_artist'])
     result['line_simplified'] = to_base64(flatted['line_simplified'])
     result['image'] = to_base64(flatted['fill_color'])
     result['fillmap'] = flatted['fill_integer'].tolist()
@@ -97,6 +102,7 @@ async def refreshnet( request ):
 @routes.post('/merge')
 async def merge( request ):
     data = await request.json()
+    data = json.loads(data)
     
     img = np.array(to_pil(data['image']))
     stroke = np.array(to_pil(data['stroke']))
@@ -115,6 +121,7 @@ async def merge( request ):
 @routes.post('/splitauto')
 async def split_auto( request ):
     data = await request.json()
+    data = json.loads(data)
     
     img = to_pil(data['image'])
     img_artist = to_pil(data['image_artist'])
@@ -135,6 +142,7 @@ async def split_auto( request ):
 @routes.post('/splitmanual')
 async def split_manual( request ):
     data = await request.json()
+    data = json.loads(data)
     
     img = to_pil(data['image'])
     img_artist = to_pil(data['image_artist'])
@@ -154,6 +162,7 @@ async def split_manual( request ):
 @routes.post('/showfillmap')
 async def show_fillmap_manual( request ):
     data = await request.json()
+    data = json.loads(data)
 
     img = to_pil(data['image'])
     palette = np.array(data['palette'])

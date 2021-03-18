@@ -221,16 +221,23 @@ def region_get_map(path_to_line_sim,
     
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
+    fillmap_artist_fullsize = thinning(fillmap_artist_fullsize)
+    fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
+
     fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
-    fill_neural_fullsize[line_artist_fullsize < 125] = 0
+    # fill_neural_fullsize[line_artist_fullsize < 125] = 0
 
     if output_path is not None:
 
-        print("Log:\tsave at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
+        print("Log:\tsave final fill at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
         cv2.imwrite(os.path.join(output_path, str(name)+"_fill.png"), fill_neural_fullsize)
+        
+        print("Log:\tsave neural fill at %s"%os.path.join(output_path, str(name)+"_neural.png"))
         cv2.imwrite(os.path.join(output_path, str(name)+"_neural.png"), fill_neural)
-        cv2.imwrite(os.path.join(output_path, str(name)+"_fill_line.png"), 
+        
+        print("Log:\tsave fine fill at %s"%os.path.join(output_path, str(name)+"_fine.png"))
+        cv2.imwrite(os.path.join(output_path, str(name)+"_fine.png"), 
             show_fill_map(fillmap_artist_fullsize_c))
     
     print("Log:\tdone")

@@ -86,6 +86,15 @@ def run_single(line_artist, net, radius, preview=False):
     assert initial_nets()
     global nets
 
+    def add_white(img):
+        img = np.array(img)
+        if img.shape[2] == 4:
+            img = 255 - img[:,:,3]
+            img[img < 250] = 0
+        return Image.fromarray(img)
+
+    line_input = add_white(line_artist)
+
     # simplify artist line
     if str(nets[net][1]) == 'cpu':
         print("Warning:\tno gpu found, using cpu mode, the inference may be slow")
@@ -93,7 +102,7 @@ def run_single(line_artist, net, radius, preview=False):
     print("Log:\tsimplify artist line")
     size = int(net.split("_")[0])
     line_simplify = predict_img(net=nets[net][0],
-                       full_img=line_artist,
+                       full_img=line_input,
                        device=nets[net][1],
                        size = int(size))
 
@@ -101,19 +110,19 @@ def run_single(line_artist, net, radius, preview=False):
     print("Log:\ttrapping ball filling with radius %s"%str(radius))
     if preview:
         return region_get_map(line_simplify,
-                path_to_line_artist=line_artist,  
+                path_to_line_artist=line_input,  
                 radius_set=[int(radius)], percentiles=[0],
                 preview=preview
                 )
     else:
         fill_map, fill_map_neural, fill_map_artist = region_get_map(line_simplify,
-                                                    path_to_line_artist=line_artist,  
+                                                    path_to_line_artist=line_input,  
                                                     output_path = "./", # need to comment later
                                                     radius_set=[int(radius)], percentiles=[0],
                                                     )
 
     # resize simplified line to original size
-    line_simplify = line_simplify.resize(line_artist.size)
+    line_simplify = line_simplify.resize(line_input.size)
     # line_simplify = cv2.resize(line_simplify, line_artist.size, interpolation = cv2.INTER_NEAREST)
 
     # color fill map for visualize
@@ -127,20 +136,39 @@ def run_single(line_artist, net, radius, preview=False):
     # layers = get_layers(fill_map, palette)
     # layers_artist = get_layers(fill_map_artist, palette)
 
-    ## np.array([[0,1], [1,2]]).tolist() -> [[0,1], [1,2]]
-    ## base64.encode( Image.fromarray( fill ).save( format = PNG, io.ByteIO ) )
+    # add alpha channel back to line arts
+    def add_alpha(img, line_color = None):
+        if img.mode == "L":
+            img = img.convert("RGB")
+        img = np.array(img)
+        
+        if img.shape[2] == 4:
+            return Image.fromarray(img)
+        
+        h, w, _ = img.shape
+        img_alpha = np.zeros((h,w,4), dtype = np.uint8)
+        img_alpha[:,:,:3] = img.copy()
 
-    # return {
-    #     'fill_color': fill.tolist(),
-    #     'fill_integer': fill_map.tolist(),
-    #     'layers': layers.tolist(),
-    #     'components_color': fill_artist.tolist(),
-    #     'components_integer': fill_map_artist.tolist(),
-    #     'components_layers': layers_artist.tolist(),
-    #     'palette': palette.tolist()
-    #     }
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+        img_alpha[:,:,3] = 255 - img
+
+        if isinstance(line_color, str):
+            assert len(line_color) == 6
+            r = int(line_color[0:2], 16)
+            g = int(line_color[2:4], 16)
+            b = int(line_color[4:6], 16)
+            img_alpha[:,:,0] = r
+            img_alpha[:,:,1] = g
+            img_alpha[:,:,2] = b
+
+        return img_alpha
+
+    line_simplify = add_alpha(line_simplify, line_color = "9ae42c")
+    line_artist = add_alpha(line_artist)
 
     return {
+        'line_artist': line_artist,
         'line_simplified': line_simplify,
         'fill_color': fill,
         'fill_integer': fill_map,
@@ -424,9 +452,24 @@ def init_palette(color_num = 100):
     Initialize the auto color palette, assume there will be no more than 500 regions
     If we get a fill map more than 100 regions, then we need to re-initialize this with larger number
     '''
+    fixed = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
+            "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94", 
+            "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
+            "#17becf", "#9edae5"]
     
+    # convert hex color table to int 
+    for i in range(len(fixed)):
+        assert len(fixed[i]) == 7
+        fixed[i] = fixed[i].replace("#", "")
+        color = []
+        for j in range(0, len(fixed[i]), 2):
+            color.append(int(fixed[i][j:j+2], 16))
+        fixed[i] = color
+    fixed = np.array(fixed, dtype = np.uint8)
+
     palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
     palette[0] = [0, 0, 0]
+    palette[1:21] = fixed
 
     return palette
 
@@ -646,10 +689,10 @@ if __name__ == "__main__":
     '''
     test for initial work flow
     '''
-    # line_path = "./trapped_ball/examples/02.png"
-    # line_artist = Image.open(line_path).convert("L")
-    # initial_nets()
-    # results = run_single(line_artist, "512", 1)
+    line_path = "./trapped_ball/examples/02.png"
+    line_artist = Image.open(line_path).convert("L")
+    initial_nets()
+    results = run_single(line_artist, "512", 1)
     
     '''
     test for merge
