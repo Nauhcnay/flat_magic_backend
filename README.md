@@ -146,15 +146,19 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/split_manual`, it should contain:
 
->  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["line_artist"]`, a base64 encoded png format image as the artist line
+
+>  `data["fillmap"]`, a 2D list as labelled fill map as the fill map which user want to work with
   
->  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
+>  `data["fillmap_artist"]`, a 2D list as labelled fill map as the corresponding component fill map
 
 >  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
 
 >  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
+
+>  `result['line_artist']`, a base64 encoded png format image as the **modified** artist line
 
 >  `result['image']`, a base64 encoded png format image as the output filling result after split
 
