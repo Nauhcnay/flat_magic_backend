@@ -28,9 +28,8 @@ Send a empty post request to `ServAdd/refreshnet`. It will reload all neural net
 A client could call this to reload the up-to-date models.
 
 ### 2. Get initail filling result
-1. get filling result on single image
 
-1.1 **Input**
+#### **Input**
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/flatsingle`, it should contain:
 
@@ -38,78 +37,45 @@ post request should be a python dictionary `data` in JSON send to `ServAdd/flats
 
 >  `data["net"]`, a string as `512` to indicate the name of neural model
 
->  ~~`data["net"]`, a string in `("512", "512_base", "1024", "1024_base")` as the name of neural models~~
-
 >  `data["radius"]`, a int as 1
-
->  ~~`data["radius"]`, a int as the radius parameter for trapped ball filling~~
 
 >  `data["preview"]`, a bool variable as False
 
->  ~~`data["preview"]`, a bool to indicate if use preview mode, in this mode, the API will only return a rough filling result in result["image"] (Of course it will be much faster)~~
-
-1.2 **Return**
+#### **Return**
 
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
->  `result['line_simplified']`, a base64 encoded png format image as the simplified line art
+>  `result['line_artist']`, a base64 encoded png format image as the normalized artist line (alpha channel added)
+
+>  `result['line_simplified']`, a base64 encoded png format image as the normalized simplified line art (alpha channel added, line color set to 9ae42c)
 
 >  `result['image']`, a base64 encoded png format image as the output filling result
 
 >  `result['fillmap']`, a 2D list as labelled fill map 
 
->  ~~`result['layers']`, a list which contains base64 encoded png image for each individual region in the fill map~~
-
->  `result['image_c']`, a base64 encoded png format image as the output component filling result
-
 >  `result['fillmap_c']`, a 2D list as labelled component fill map 
-
->  ~~`result['layers_c']`, a list which contains base64 encoded png image for each individual region in the component fill map~~
 
 >  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
-2. get filling results on multiple images
-
-post request should be a python dictionary `data` in JSON send to `ServAdd/flatmultiple`, it should be almost the same as 'data' in `flatsingle`, except everything in `data` should be a list which contain multiple items, each item should be one input. 
-
-2.1 **Input**
-
->  `data["image"]`, a list of base64 encoded png format images as the input artist line art
-
->  `data["net"]`, a list of strings as `512` to indicate the name of neural model
-
->  `data["radius"]`, a list of int as 1
-
->  `data["preview"]`, a list of bool variable as False
-
-2.2 **Return**
-
-Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
-
->  `result['line_simplified']`, a list of base64 encoded png format images as the simplified line art
-
->  `result['image']`, a list of base64 encoded png format images as the output filling result
-
->  `result['fillmap']`, a list of 2D lists as labelled fill map 
-
->  `result['image_c']`, a list of base64 encoded png format images as the output component filling result
-
->  `result['fillmap_c']`, a list of 2D lists as labelled component fill map 
-
->  `result['palette']`, a list of 2D (n by 3) lists as the mapping from fill map label to pixel color
 
 ### 3. Merge filling regions
 
-post request should be a python dictionary `data` in JSON send to `ServAdd/merge`, it should contain:
+#### **Input**
+post request should be a python dictionary `data` in JSON send to `ServAdd/merge`
 
->  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["line_artist"]`, a base64 encoded png format image as the artist line
 
->  `data["stroke"]`, a base64 encoded png format image as the user input merge stroke (the stroke could be any color, but the background should always be white)
+>  `data["fillmap"]`, a 2D list as the fill map which user want to work with
+
+>  `data["stroke"]`, a base64 encoded png format image as the user input merge stroke (the stroke could be any color except 255)
 
 >  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
+#### **Output**
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
+>  `result['line_simplified']`, a base64 encoded png format image as the updated simplified line
+  
 >  `result['image']`, a base64 encoded png format image as the output filling result after merge
 
 >  `result['fillmap']`, a 2D list as labelled fill map after merge
@@ -120,21 +86,27 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 ### 4. Split filling regions
 
-1. Auto split
+#### 4.1 **Coarse split**
 
+#### **Input**
 post request should be a python dictionary `data` in JSON send to `ServAdd/splitauto`, it should contain:
 
->  `data["image"]`, a base64 encoded png format image as the fill map which user want to work with
+>  `data["line_artist"]`, a base64 encoded png format image as the artist line
+
+>  `data["fillmap"]`, a 2D list as the fill map which user want to work with
   
->  `data["image_artist"]`, a base64 encoded png format image as the corresponding component fill map
+>  `data["fillmap_artist"]`, a 2D list as the corresponding component fill map
 
 >  `data["stroke"]`, a base64 encoded png format image as the user input split stroke
 
 >  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
+#### **Output**
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 >  `result['image']`, a base64 encoded png format image as the output filling result after split
+  
+>  `result['line_simplified']`, a base64 encoded png format image as the **modified** simplified line
 
 >  `result['fillmap']`, a 2D list as labelled fill map after split
 
@@ -142,7 +114,9 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 >  `result['palette']`, a 2D (n by 3) list as the mapping from fill map label to pixel color
   
-2. Manual split
+#### 4.2 **Fine split**
+
+#### **Input**
 
 post request should be a python dictionary `data` in JSON send to `ServAdd/split_manual`, it should contain:
 
@@ -158,9 +132,13 @@ post request should be a python dictionary `data` in JSON send to `ServAdd/split
 
 >  `data["palette"]`, a 2D (n by 3) list as the mapping from fill map label to pixel color
 
+
+#### **Output**
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 >  `result['line_artist']`, a base64 encoded png format image as the **modified** artist line
+
+>  `result['line_simplified']`, a base64 encoded png format image as the **modified** simplified line
 
 >  `result['image']`, a base64 encoded png format image as the output filling result after split
 
