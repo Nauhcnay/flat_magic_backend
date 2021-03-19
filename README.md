@@ -118,7 +118,7 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 #### **Input**
 
-post request should be a python dictionary `data` in JSON send to `ServAdd/split_manual`, it should contain:
+post request should be a python dictionary `data` in JSON send to `ServAdd/splitmanual`, it should contain:
 
 >  `data["line_artist"]`, a base64 encoded png format image as the artist line
 
