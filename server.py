@@ -7,6 +7,7 @@ import flatting_api
 import base64
 import io
 import json
+import asyncio
 
 routes = web.RouteTableDef()
 
@@ -102,9 +103,12 @@ async def refreshnet( request ):
 @routes.post('/merge')
 async def merge( request ):
     data = await request.json()
-    data = json.loads(data)
+    try:
+        data = json.loads(data)
+    except:
+        print("got dict directly")
     
-    img = np.array(to_pil(data['image']))
+    img = np.array(data['fillmap'])
     stroke = np.array(to_pil(data['stroke']))
     palette = np.array(data['palette'])
     
@@ -121,10 +125,14 @@ async def merge( request ):
 @routes.post('/splitauto')
 async def split_auto( request ):
     data = await request.json()
-    data = json.loads(data)
+    try:
+        data = json.loads(data)
+    except:
+        print("got dict directly")
     
-    img = to_pil(data['image'])
-    img_artist = to_pil(data['image_artist'])
+    img = np.array(data['fillmap'])
+    img_artist = np.array(data['fillmap_artist'])
+    line_artist = np.array(to_pil(data['line_artist']))
     stroke = to_pil(data['stroke'])
     palette = np.array(data['palette'])
     
@@ -142,16 +150,22 @@ async def split_auto( request ):
 @routes.post('/splitmanual')
 async def split_manual( request ):
     data = await request.json()
-    data = json.loads(data)
+    try:
+        data = json.loads(data)
+    except:
+        print("got dict directly")
     
-    img = to_pil(data['image'])
-    img_artist = to_pil(data['image_artist'])
-    stroke = to_pil(data['stroke'])
+    fillmap = np.array(data['fillmap'])
+    fillmap_artist = np.array(data['fillmap_artist'])
+    stroke = np.array(to_pil(data['stroke']))
+    line_artist = to_pil(data['line_artist'])
+    line_neural = to_pil(data['line_simplified'])
     palette = np.array(data['palette'])
     
-    splited = flatting_api.split_manual(img, img_artist, stroke, palette)
+    splited = flatting_api.split_manual(fillmap, fillmap_artist, stroke, line_artist, line_neural, palette)
 
     result = {}
+    result['line_artist'] = to_base64(splited['line_artist'])
     result['image'] = to_base64(splited['fill_color'])
     result['fillmap'] = splited['fill_integer'].tolist()
     result['layers'] = [to_base64(img) for img in splited['layers']]
@@ -195,7 +209,7 @@ def to_pil(byte):
     byte = base64.b64decode(byte)
     return Image.open(BytesIO(byte))
 
-app = web.Application()
+app = web.Application(client_max_size = 1024 * 1024 ** 2)
 app.add_routes(routes)
 web.run_app(app)
 
