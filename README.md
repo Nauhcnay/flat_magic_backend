@@ -74,7 +74,7 @@ post request should be a python dictionary `data` in JSON send to `ServAdd/merge
 #### **Output**
 Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
->  `result['line_simplified']`, a base64 encoded png format image as the updated simplified line
+>  `result['line_simplified']`, a base64 encoded png format image as the **updated** simplified line
   
 >  `result['image']`, a base64 encoded png format image as the output filling result after merge
 
