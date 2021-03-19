@@ -148,6 +148,8 @@ post request should be a python dictionary `data` in JSON send to `ServAdd/split
 
 >  `data["line_artist"]`, a base64 encoded png format image as the artist line
 
+>  `data["line_simplified"]`, a base64 encoded png format image as the simplied line
+
 >  `data["fillmap"]`, a 2D list as labelled fill map as the fill map which user want to work with
   
 >  `data["fillmap_artist"]`, a 2D list as labelled fill map as the corresponding component fill map
