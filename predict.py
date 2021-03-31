@@ -14,7 +14,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from unet import UNet
-
+from utils.preprocessing import to_point_list, find_bbox, crop_img
 from run import region_get_map
 
 
@@ -40,9 +40,9 @@ def denormalize(img):
     # to numpy
     img_np = img_np.cpu().numpy().transpose((1,2,0))
     
-    return Image.fromarray(img_np.astype(np.uint8))
+    return Image.fromarray(img_np.astype(np.uint8)).convert("L")
 
-def to_numpy(f, size):
+def to_numpy(f, size, bbox=None):
     
     if type(f) == str:
         img = np.array(Image.open(f).convert("L"))
@@ -50,13 +50,13 @@ def to_numpy(f, size):
     else:
         img = np.array(f.convert("L"))
 
-    h, w = img.shape
-    if w > size or h > size:
-        ratio = size/w if w > h else size/h
-    else:
-        ratio = 1
+    if bbox != None:
+        img = crop_img(bbox, img)
 
-    return cv2.resize(img, (int(w*ratio), int(h*ratio)), interpolation=cv2.INTER_AREA)
+    h, w = img.shape
+    ratio = size/w if w < h else size/h
+
+    return cv2.resize(img, (int(w*ratio+0.5), int(h*ratio+0.5)), interpolation=cv2.INTER_AREA)
 
 def predict_img(net,
                 full_img,
@@ -64,16 +64,21 @@ def predict_img(net,
                 size):
     net.eval()
 
+    # corp image
+    bbox = find_bbox(to_point_list(np.array(full_img)))
+
     # read image
     print("Log:\tpredict image at size %d"%size)
-    img = to_tensor(to_numpy(full_img, size))
+    img = to_tensor(to_numpy(full_img, size, bbox = bbox))
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 
     with torch.no_grad():
         output = net(img)
 
-    return denormalize(output[0])
+    output = denormalize(output[0])
+    
+    return output, bbox 
 
 
 def get_args():

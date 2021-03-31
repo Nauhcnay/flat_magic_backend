@@ -221,10 +221,10 @@ def region_get_map(path_to_line_sim,
     
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
-    fillmap_artist_fullsize = thinning(fillmap_artist_fullsize)
+    fillmap_artist_fullsize_c = thinning(fillmap_artist_fullsize_c)
     fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
 
-    fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize)
+    fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize_c)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     # fill_neural_fullsize[line_artist_fullsize < 125] = 0
 

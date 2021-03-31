@@ -26,8 +26,8 @@ def to_point_list(img_np):
 def find_bbox(p):
     t = p[0].min()
     l = p[1].min()
-    b = p[0].max()
-    r = p[1].max()
+    b = p[0].max()+1
+    r = p[1].max()+1
     return t,l,b,r
 
 def crop_img(bbox, img_np):
