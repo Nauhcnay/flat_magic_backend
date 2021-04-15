@@ -18,7 +18,7 @@ And you will need the following modules to trian and test line simplification ne
 
 
 ### 2. Download pertrained models
-Download the [pertrained network model](https://drive.google.com/file/d/15l3wPO4WbMk0DmqR7reSU1mHzOaaBCfQ/view?usp=sharing) and put it into `./`, then:
+Download the [pertrained network model]() and put it into `./`, then:
 
 `unzip checkpoints.zip`
 
