@@ -86,14 +86,8 @@ async def flatsingle( request ):
     result['line_hint'] = to_base64(flatted['line_hint'])
     result['line_simplified'] = to_base64(flatted['line_simplified'])
     result['image'] = to_base64(flatted['fill_color'])
-    result['fillmap'] = to_base64(flatted['fill_integer'])
-    # layers would be more complex, but it should bascially same as image
-    # result['layers'] = [to_base64(img) for img in flatted['layers']]
-    
-    # result['image_c'] = to_base64(flatted['components_color'])
-    result['fillmap_c'] = to_base64(flatted['components_integer'])
-    # result['layers_c'] = [to_base64(img) for img in flatted['components_layers']]
-    result['palette'] = flatted['palette'].tolist()
+    result['fill_artist'] = to_base64(flatted['components_color'])
+    # result['fillmap'] = to_base64(flatted['fill_integer'])
 
     return web.json_response( result )
                 
@@ -110,18 +104,16 @@ async def merge( request ):
         print("got dict directly")
     
     line_artist = to_pil(data['line_artist'])
-    fillmap = np.array(to_pil(data['fillmap']))
+    fill_neural = np.array(to_pil(data['fill_neural']))
+    fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = np.array(to_pil(data['stroke']))
-    palette = np.array(data['palette'])
+    # palette = np.array(data['palette'])
     
-    merged = flatting_api.merge(fillmap, stroke, line_artist, palette)
+    merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['image'] = to_base64(merged['fill_color'])
     result['line_simplified'] = to_base64(merged['line_simplified'])
-    result['fillmap'] = to_base64(merged['fill_integer'])
-    # result['layers'] = [to_base64(img) for img in merged['layers']]
-    result['palette'] = merged['palette'].tolist()
 
     return web.json_response(result)
 
@@ -133,19 +125,15 @@ async def split_auto( request ):
     except:
         print("got dict directly")
     
-    fillmap = np.array(to_pil(data['fillmap']))
-    fillmap_artist = np.array(to_pil(data['fillmap_artist']))
+    fill_neural = np.array(to_pil(data['fill_neural']))
+    fill_artist = np.array(to_pil(data['fill_artist']))
     line_artist = np.array(to_pil(data['line_artist']))
     stroke = to_pil(data['stroke'])
-    palette = np.array(data['palette'])
     
-    splited = flatting_api.split_auto(fillmap, fillmap_artist, stroke, line_artist, palette)
+    splited = flatting_api.split_auto(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['image'] = to_base64(splited['fill_color'])
-    result['fillmap'] = to_base64(splited['fill_integer'])
-    # result['layers'] = [to_base64(img) for img in splited['layers']]
-    result['palette'] = splited['palette'].tolist()
     result['line_simplified'] = to_base64(splited['line_neural'])
 
     return web.json_response(result)
@@ -159,22 +147,17 @@ async def split_manual( request ):
     except:
         print("got dict directly")
     
-    fillmap = np.array(to_pil(data['fillmap']))
-    fillmap_artist = np.array(to_pil(data['fillmap_artist']))
+    fill_neural = np.array(to_pil(data['fill_neural']))
+    fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
-    # line_neural = to_pil(data['line_simplified'])
-    palette = np.array(data['palette'])
     
-    splited = flatting_api.split_manual(fillmap, fillmap_artist, stroke, line_artist, palette)
+    splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
     result['line_simplified'] = to_base64(splited['line_neural'])
     result['image'] = to_base64(splited['fill_color'])
-    result['fillmap'] = to_base64(splited['fill_integer'])
-    # result['layers'] = [to_base64(img) for img in splited['layers']]
-    result['palette'] = splited['palette'].tolist()
 
     return web.json_response(result)    
 
@@ -216,6 +199,8 @@ def to_pil(byte):
 
 app = web.Application(client_max_size = 1024 * 1024 ** 2)
 app.add_routes(routes)
+
+# ToDo: start two server
 web.run_app(app)
 
 ## From JavaScript:

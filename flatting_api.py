@@ -107,12 +107,13 @@ def add_alpha(img, line_color = None, opacity = 1):
     return img_alpha
 
 def fillmap_masked_line(fill_map, line_input):
-        edges = cv2.Canny(fill_map.astype(np.uint8), 0, 0)
-        kernel = np.ones((5,5),np.uint8)
-        edges = cv2.dilate(edges, kernel, iterations = 2)
-        result = np.array(line_input).copy()
-        result[edges == 0] = 255
-        return Image.fromarray(result)
+    # generate the masked line from given fill map
+    edges = cv2.Canny(fill_map.astype(np.uint8), 0, 0)
+    kernel = np.ones((5,5),np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations = 2)
+    result = np.array(line_input).copy()
+    result[edges == 0] = 255
+    return Image.fromarray(result)
 
 # add cropped region back
 def add_cropped_back(img_pil, bbox, img_size):
@@ -198,13 +199,8 @@ def run_single(line_artist, net, radius, preview=False):
     fill_artist, palette = show_fillmap_auto(fill_map_artist)
 
     fill, palette = show_fillmap_auto(fill_map, palette)
-    
-    # get layers, we don't need layers right now
-    # layers = get_layers(fill_map, palette)
-    # layers_artist = get_layers(fill_map_artist, palette)
 
     # refine the neural line
-    
     line_simplify = fillmap_masked_line(fill_map, line_input)
     line_hint = fillmap_masked_line(fill_map_artist, line_input)
 
@@ -220,12 +216,11 @@ def run_single(line_artist, net, radius, preview=False):
         'line_hint': line_hint,
         'line_simplified': line_simplify,
         'fill_color': fill,
-        'fill_integer': fill_map,
-        # 'layers': layers,
+        # 'fill_integer': fill_map,
         'components_color': fill_artist,
-        'components_integer': fill_map_artist,
+        # 'components_integer': fill_map_artist,
         # 'components_layers': layers_artist,
-        'palette': palette
+        # 'palette': palette
         }
 
 def run_multiple(line_artist_list, net_list, radius_list, preview=False):
@@ -275,9 +270,34 @@ def run_multiple(line_artist_list, net_list, radius_list, preview=False):
         'components_integer': fill_map_artist_list,
         # 'components_layers': layers_artist_list
         'palettes': palette_list
-        }
+        }    
 
-def merge(fill_map, merge_map, line_artist, palette):
+def to_fillmap(image):
+    '''
+    Convert input image to fill map, this will make the api support undo feature
+    Given:
+        image, the numpy array of input image
+    '''
+    h, w, c = image.shape
+    assert c == 3 or c == 4
+    # get labels of the color filled result
+    color_map = (1e6*image[:,:,0] + 1e3*image[:,:,1] + image[:,:,2]).astype(np.int64)
+    colors = np.unique(color_map)
+    color_to_label = {}
+    palette = []
+    for i, c in enumerate(colors):
+        color_to_label[c] = i
+        # convert c back to color
+        color = [c//(10**(3*i))%1000 for i in range(2, -1, -1)]
+        palette.append(color)
+    # map color map to fill map
+    fill_map = np.copy(color_map)
+    for k, v in color_to_label.items():
+        fill_map[color_map == k] = v
+
+    return fill_map, np.array(palette)
+
+def merge(fill_neural, fill_artist, merge_map, line_artist):
     '''
     Given:
         fill_map, labeled region map
@@ -287,32 +307,65 @@ def merge(fill_map, merge_map, line_artist, palette):
     '''
     # get labels selected by merge stroke
     print("Log:\tmerging")
-    merge_labels = stroke_to_label(fill_map, merge_map)
+    # get fill_map and palette
+    fill_map, palette = to_fillmap(fill_neural)
+    fill_map_artist, _ = to_fillmap(fill_artist)
     line_artist = add_white(line_artist)
 
-    if len(merge_labels) <= 1:
-        print("Log:\t(probably) inaccurate input, skip merge")
-        fill, palette = show_fillmap_auto(fill_map, palette)
-        layers = get_layers(fill_map, palette)
-        line_neural = fillmap_masked_line(fill_map, line_artist)
-        line_neural = add_alpha(line_neural, line_color = "9ae42c")
-        return {"line_simplified": line_neural,
-                "fill_color": fill,
-                "fill_integer": fill_map,
-                "layers": layers,
-                "palette": palette}
+    # find how many merge strokes in merge map
+    merge_map = np.array(Image.fromarray(merge_map).convert("RGB"))
+    strokes, stroke_palette = to_fillmap(merge_map)
+    for i in range(len(stroke_palette)):
+        color = stroke_palette[i]
+        if (color == [255, 255, 255]).all(): continue # skip the white back ground
+        stroke = (1 - (strokes == i).astype(np.int)) * 255
+        merge_labels = stroke_to_label(fill_map, stroke)
+        def split_in_merge(stroke, fill_map, fill_map_artist):
+            # find each single stroke in same color merge brush
+            _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
+            stroke_label = np.unique(stroke_map)
+            for l in stroke_label:
+                if l == 0: continue # skip background
+                stroke_size = (stroke_map == l).sum()
+                split_labels_artist = np.unique(fill_map_artist[stroke_map == l])
+                if (stroke_size < 32 and len(split_labels_artist) == 1):
+                    fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
 
-    # find max region
-    max_label = find_max_region(fill_map, merge_labels)
+            return fill_map
 
-    # merge all rest regions to max region
-    for r in merge_labels:
-        if r == max_label: continue
-        mask = fill_map == r
-        fill_map[mask] = max_label
+        fill_map = split_in_merge(stroke, fill_map, fill_map_artist)
+        
+        # split this region in fill artist into a different region
+
+        # if len(merge_labels) <= 1:
+        #     print("Log:\t(probably) inaccurate input, skip merge")
+        #     fill, palette = show_fillmap_auto(fill_map, palette)
+        #     line_neural = fillmap_masked_line(fill_map, line_artist)
+        #     line_neural = add_alpha(line_neural, line_color = "9ae42c")
+        #     return {"line_simplified": line_neural,
+        #             "fill_color": fill}
+
+        # need to update merge label again
+        merge_labels = stroke_to_label(fill_map, stroke)
+
+        # update palette if the max label has greater than the size of the palette
+        if fill_map.max() >= len(palette):
+            palette = init_palette(fill_map.max() + 50, palette)
+
+        # find max region
+        max_label = find_max_region(fill_map, merge_labels)
+
+        # merge all rest regions to max region
+        for r in merge_labels:
+            if r == max_label: continue
+            mask = fill_map == r
+            fill_map[mask] = max_label
+        
+        # update region color
+        palette[max_label] = color
 
     # visualize fill_map
-    fill, palette = show_fillmap_auto(fill_map, palette)
+    fill, _ = show_fillmap_auto(fill_map, palette)
     # layers = get_layers(fill_map, palette)
 
     # update neural line
@@ -321,11 +374,12 @@ def merge(fill_map, merge_map, line_artist, palette):
 
     return {"line_simplified": line_neural,
             "fill_color": fill,
-            "fill_integer": fill_map,
+            # "fill_integer": fill_map,
             # "layers": layers,
-            "palette": palette}
+            # "palette": palette
+            }
 
-def split_auto(fill_map, fill_map_artist, split_map_auto, line_artist, palette):
+def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
     '''
     Given:
         fill_map, labeled final region map 
@@ -335,6 +389,10 @@ def split_auto(fill_map, fill_map_artist, split_map_auto, line_artist, palette):
     Action:
         split new regions into fill_map
     '''
+    # get fill map from input
+    fill_map, palette = to_fillmap(fill_neural)
+    fill_map_artist, _ = to_fillmap(fill_artist)
+
     # preprocessing lines
     line_artist = add_white(line_artist, return_numpy = True)
     split_map_auto = add_white(split_map_auto, return_numpy = True)
@@ -342,23 +400,41 @@ def split_auto(fill_map, fill_map_artist, split_map_auto, line_artist, palette):
     # select regions that user want to split
     print("Log:\tcoarse splitting")
     split_labels_artist = stroke_to_label(fill_map_artist, split_map_auto)
-    if len(split_labels_artist) <= 1:
-        print("Log:\t(probably) inaccurate input, skip split auto")
-        neural_line = fillmap_masked_line(fill_map, line_artist)
-        neural_line = add_alpha(neural_line, line_color = "9ae42c")
-        fill, palette = show_fillmap_auto(fill_map, palette)
-        layers = get_layers(fill_map, palette)
-        return {"line_neural": neural_line,
-                "fill_color": fill,
-                "fill_integer": fill_map,
-                "layers": layers,
-                "palette": palette}
+    
+    
+
+    fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
+
+    # update neural line
+    neural_line = fillmap_masked_line(fill_map, line_artist)
+
+    # visualize fill_map and lines
+    fill, _ = show_fillmap_auto(fill_map, palette)
+    neural_line = add_alpha(neural_line, line_color = "9ae42c")
+
+    return {"line_neural": neural_line,
+            "fill_color": fill,
+            }
+
+def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
+    '''
+    A helper function for corase split
+    '''
+
+    # if len(split_labels_artist) <= 1:
+    #     print("Log:\t(probably) inaccurate input, skip split auto")
+    #     neural_line = fillmap_masked_line(fill_map, line_artist)
+    #     neural_line = add_alpha(neural_line, line_color = "9ae42c")
+    #     fill, _ = show_fillmap_auto(fill_map, palette)
+    #     return {"line_neural": neural_line,
+    #             "fill_color": fill
+    #             }
 
     # find out the region that don't needs to be extract
     neural_to_artist = {} # map from fill_map to fill_map_artist
-    for r in split_labels_artist:
-        rn = np.unique(fill_map[fill_map_artist == r])
-        for s in rn:
+    for r in split_labels_artist: # r is the region in fine split regions selected by stroke
+        rn = np.unique(fill_map[fill_map_artist == r]) # find regions that locate at the same position in neural fill map
+        for s in rn: # create that mapping from neural region to artist region
             if s in neural_to_artist:
                 neural_to_artist[s].append(r)
             else:
@@ -376,22 +452,9 @@ def split_auto(fill_map, fill_map_artist, split_map_auto, line_artist, palette):
         fill_map[mask] = next_label
         next_label += 1
 
-    # update neural line
-    neural_line = fillmap_masked_line(fill_map, line_artist)
+    return fill_map
 
-    # visualize fill_map and lines
-    fill, palette = show_fillmap_auto(fill_map, palette)
-    print("Log:\tgenerating layers")
-    # layers = get_layers(fill_map, palette)
-    neural_line = add_alpha(neural_line, line_color = "9ae42c")
-
-    return {"line_neural": neural_line,
-            "fill_color": fill,
-            "fill_integer": fill_map,
-            # "layers": layers,
-            "palette": palette}
-
-def split_manual(fill_map, fill_map_artist, split_map_manual, line_artist, palette):
+def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     '''
     Given:
         fill_map, labeled final region map 
@@ -401,6 +464,8 @@ def split_manual(fill_map, fill_map_artist, split_map_manual, line_artist, palet
         split new regions into fill_map
     '''
     print("Log:\tfine splitting")
+    fill_map, palette = to_fillmap(fill_neural)
+    fill_map_artist, _ = to_fillmap(fill_artist)
 
     line_artist = add_white(line_artist, return_numpy = True)
     # neural_line = add_white(neural_line, return_numpy = True)
@@ -422,13 +487,10 @@ def split_manual(fill_map, fill_map_artist, split_map_manual, line_artist, palet
         neural_line = fillmap_masked_line(fill_map, line_artist)
         neural_line = add_alpha(neural_line, line_color = "9ae42c")
         fill, palette = show_fillmap_auto(fill_map, palette)
-        layers = get_layers(fill_map, palette)
         return {"line_artist": line_artist,
                 "line_neural": neural_line,
                 "fill_color": fill,
-                "fill_integer": fill_map,
-                "layers": layers,
-                "palette": palette}
+                }
 
     # merge all involved regions
     p_list = []
@@ -477,9 +539,7 @@ def split_manual(fill_map, fill_map_artist, split_map_manual, line_artist, palet
     return {"line_artist": line_artist,
             "line_neural": neural_line,
             "fill_color": fill,
-            "fill_integer": fill_map,
-            # "layers": layers,
-            "palette": palette}
+            }
 
 def show_fillmap_manual(fill_map, palette):
     '''
@@ -506,14 +566,14 @@ def show_fillmap_auto(fill_map, palette=None):
     return:
         color_map, the random colorized map
     '''
-    region_num = np.max(fill_map) + 1
+    region_num = np.max(fill_map) + 20
     
     if palette is None:
         palette = init_palette(region_num + 50)
 
     if region_num > len(palette):
-        print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
-        palette = init_palette(region_num)
+        # print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
+        palette = init_palette(region_num, palette)
 
     return palette[fill_map].astype(np.uint8), palette
 
@@ -554,29 +614,35 @@ def get_layers(fill_map, palette):
 
     return layers
 
-def init_palette(color_num = 100):
+def init_palette(color_num = 100, old_palette=None):
     '''
     Initialize the auto color palette, assume there will be no more than 500 regions
     If we get a fill map more than 100 regions, then we need to re-initialize this with larger number
     '''
-    fixed = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
-            "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94", 
-            "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
-            "#17becf", "#9edae5"]
-    
-    # convert hex color table to int 
-    for i in range(len(fixed)):
-        assert len(fixed[i]) == 7
-        fixed[i] = fixed[i].replace("#", "")
-        color = []
-        for j in range(0, len(fixed[i]), 2):
-            color.append(int(fixed[i][j:j+2], 16))
-        fixed[i] = color
-    fixed = np.array(fixed, dtype = np.uint8)
+    # if the old palette is provide, initialize it based on the old palette
+    if old_palette is not None:
+        p_size = len(old_palette)
+        color_num = color_num if color_num > p_size else p_size+20
+        fixed = old_palette
+
+    else:    
+        fixed = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
+                "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94", 
+                "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
+                "#17becf", "#9edae5"]
+        # convert hex color table to int 
+        for i in range(len(fixed)):
+            assert len(fixed[i]) == 7
+            fixed[i] = fixed[i].replace("#", "")
+            color = []
+            for j in range(0, len(fixed[i]), 2):
+                color.append(int(fixed[i][j:j+2], 16))
+            fixed[i] = color
+        fixed = np.array(fixed, dtype = np.uint8)
+        p_size = len(fixed)
 
     palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
-    palette[0] = [0, 0, 0]
-    palette[1:21] = fixed
+    palette[0 : p_size] = fixed
 
     return palette
 
@@ -591,13 +657,13 @@ def stroke_to_label(fill_map, stroke_map):
     # threshold the stroke map
     if len(stroke_map.shape) == 3:
         stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
-    stroke_map = stroke_map.copy()
-    stroke_map[stroke_map < 240] = 0
-    stroke_map[stroke_map >= 240] = 1
+    stroke = stroke_map.copy()
+    stroke[stroke_map < 250] = 0
+    stroke[stroke_map >= 250] = 1
 
     # get the labels selected by stroke map
-    labels = np.unique(fill_map[stroke_map == 0])
-    labels = labels[labels != 0]
+    labels = np.unique(fill_map[stroke == 0])
+    # labels = labels[labels != 0]
 
     return labels
 
@@ -619,7 +685,7 @@ def find_region(fill_map, mask):
 
 def find_max_region(fill_map, selected_labels):
     '''
-    A helper function to find the label of max region amout selected regions
+    A helper function to find the label with largest region size among selected regions
     '''
     # find the size of selected regions
     labels, counts = np.unique(fill_map, return_counts=True)
