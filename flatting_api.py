@@ -106,13 +106,27 @@ def add_alpha(img, line_color = None, opacity = 1):
 
     return img_alpha
 
-def fillmap_masked_line(fill_map, line_input):
-    # generate the masked line from given fill map
+def fillmap_masked_line(fill_map, line_input=None):
+    '''
+    Generate the hint line form the fill_map
+    '''
+    # get the one-pixel width edge
     edges = cv2.Canny(fill_map.astype(np.uint8), 0, 0)
-    kernel = np.ones((5,5),np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations = 2)
-    result = np.array(line_input).copy()
-    result[edges == 0] = 255
+    
+    if line_input != None:
+        # increase the width of edge line
+        kernel = np.ones((5,5),np.uint8)
+        edges = cv2.dilate(edges, kernel, iterations = 2)
+        result = np.array(line_input).copy()
+        # mask line input with bolded edge line
+        result[edges == 0] = 255
+    else:
+        # reverse the edge map
+        kernel = np.ones((3,3),np.uint8)
+        edges = cv2.dilate(edges, kernel, iterations = 1)
+        result = np.zeros(edges.shape, np.uint8)
+        result[edges == 0] = 255
+
     return Image.fromarray(result)
 
 # add cropped region back
@@ -196,17 +210,19 @@ def run_single(line_artist, net, radius, preview=False):
     # color fill map for visualize
     drop_small_regions(fill_map_artist)
     fill_map_artist = verify_reigon(fill_map_artist, True)
-    fill_artist, palette = show_fillmap_auto(fill_map_artist)
+    
 
-    fill, palette = show_fillmap_auto(fill_map, palette)
+    fill, _ = show_fillmap_auto(fill_map)
+
+    fill_artist, _ = show_fillmap_auto(fill_map_artist)
 
     # refine the neural line
-    line_simplify = fillmap_masked_line(fill_map, line_input)
-    line_hint = fillmap_masked_line(fill_map_artist, line_input)
+    line_simplify = fillmap_masked_line(fill_map)
+    line_hint = fillmap_masked_line(fill_map_artist)
 
     # add alpha channel back to line arts
-    line_simplify = add_alpha(line_simplify, line_color = "9ae42c")
-    line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.5)
+    line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 0.7)
+    line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
     line_artist = add_alpha(line_artist)
 
     
@@ -349,8 +365,8 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
         merge_labels = stroke_to_label(fill_map, stroke)
 
         # update palette if the max label has greater than the size of the palette
-        if fill_map.max() >= len(palette):
-            palette = init_palette(fill_map.max() + 50, palette)
+        if len(np.unique(fill_map)) >= len(palette):
+            palette = init_palette(len(np.unique(fill_map)), palette)
 
         # find max region
         max_label = find_max_region(fill_map, merge_labels)
@@ -566,10 +582,13 @@ def show_fillmap_auto(fill_map, palette=None):
     return:
         color_map, the random colorized map
     '''
-    region_num = np.max(fill_map) + 20
+    region_num = np.max(fill_map)
     
-    if palette is None:
-        palette = init_palette(region_num + 50)
+    if palette is None and region_num < 256:
+        palette = init_palette(region_num, grayscale=True)
+    
+    elif palette is None and region_num >= 256:
+        palette = init_palette(region_num)
 
     if region_num > len(palette):
         # print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
@@ -614,7 +633,7 @@ def get_layers(fill_map, palette):
 
     return layers
 
-def init_palette(color_num = 100, old_palette=None):
+def init_palette(color_num = 100, old_palette=None, grayscale=False):
     '''
     Initialize the auto color palette, assume there will be no more than 500 regions
     If we get a fill map more than 100 regions, then we need to re-initialize this with larger number
@@ -623,28 +642,45 @@ def init_palette(color_num = 100, old_palette=None):
     if old_palette is not None:
         p_size = len(old_palette)
         color_num = color_num if color_num > p_size else p_size+20
-        fixed = old_palette
+        palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
+        palette[0 : p_size] = old_palette
 
-    else:    
-        fixed = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
-                "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94", 
-                "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
-                "#17becf", "#9edae5"]
-        # convert hex color table to int 
-        for i in range(len(fixed)):
-            assert len(fixed[i]) == 7
-            fixed[i] = fixed[i].replace("#", "")
-            color = []
-            for j in range(0, len(fixed[i]), 2):
-                color.append(int(fixed[i][j:j+2], 16))
-            fixed[i] = color
-        fixed = np.array(fixed, dtype = np.uint8)
-        p_size = len(fixed)
-
-    palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
-    palette[0 : p_size] = fixed
+    else:
+        # generally, we need to generate a palette which size is eq or greater than the fill map size
+        if grayscale:
+            # according to the five color theroem, this palette should be enough
+            # but only use five colors will make the extraction of fill map from color image impossible or non-trivial
+            # fixed = ["#EEEEEE", "#CCCCCC", "#AAAAAA", "#999999", "#666666"]
+            assert color_num < 256
+            step = 255 // color_num
+            palette = np.array([[i, i, i] for i in range(255, -1, -step)])
+        else:
+            # we probably will not use this branch anymore, but just keep it here in case some day we need a random
+            # color map again
+            fixed = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",
+                    "#d62728", "#ff9896", "#9467bd", "#c5b0d5", "#8c564b", "#c49c94", 
+                    "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
+                    "#17becf", "#9edae5"]
+            fixed, p_size = to_digital_palette(fixed)
+            palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
+            palette[0 : p_size] = fixed
 
     return palette
+
+def to_digital_palette(text_palette):
+    '''
+    A helper function to convert text palette to digital palette
+    '''
+    for i in range(len(text_palette)):
+        assert len(text_palette[i]) == 7
+        text_palette[i] = text_palette[i].replace("#", "")
+        color = []
+        for j in range(0, len(text_palette[i]), 2):
+            color.append(int(text_palette[i][j:j+2], 16))
+        text_palette[i] = color
+    digital_palette = np.array(text_palette, dtype = np.uint8)
+    p_size = len(digital_palette)
+    return digital_palette, p_size
 
 def stroke_to_label(fill_map, stroke_map):
     '''

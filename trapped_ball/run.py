@@ -131,8 +131,10 @@ def region_get_map(path_to_line_sim,
     # read files
     img, name = read_png(path_to_line_sim)
     line_artist_fullsize, _ = read_png(path_to_line_artist)
+    line_artist_fullsize = cv2.adaptiveThreshold(line_artist_fullsize, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
     
     print("Log:\ttrapped ball filling")
+    # line_simplify = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
     _, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
     fills = []
     result = line_simplify # this should be line_simplify numpu array
