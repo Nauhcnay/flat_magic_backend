@@ -150,6 +150,7 @@ Then the API will return a ptyhon dictionary `result` in JSON, it will contain:
 
 
 ## Test case
+### Merging and spliting test
 Here are some test case that run locally to show how merge and split function works. To repeat those examples, please:
 
 Download the [test input](https://drive.google.com/file/d/1wVB4zPOWiVXmSwItq1Dq1px2zdobZsfB/view?usp=sharing) and put it into `./trapped_ball`, then:
@@ -161,6 +162,13 @@ Download the [test input](https://drive.google.com/file/d/1wVB4zPOWiVXmSwItq1Dq1
 `cd ..`
 
 `python flatting_api.py`
+
+### Trapped ball filling and bleeding removal test
+Simply run the command below:
+
+`cd trapped_ball`
+
+`python run.py --exp4`
 
 ## Train line simplification network
 
