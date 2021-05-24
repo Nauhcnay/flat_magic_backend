@@ -745,8 +745,8 @@ if __name__ == '__main__':
         radius_percentile_explor_repeat(radius_set2, args.input, "./exp3")
     elif args.exp4:
         # let's test 2 pass merge
-        line = "./examples/line.png"
-        line_sim = "./examples/line_simplify.png"
+        line = "./examples/01.png"
+        line_sim = "./examples/01_sim.png"
         # trappedball_2pass_exp(line, line_sim)
         region_get_map(line_sim, 
                 path_to_line_artist=line,
