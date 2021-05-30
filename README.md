@@ -11,11 +11,20 @@ To run color filling, you need the following module installed:
 - pillow
 - cython
 - aiohttp
+- skimage
 
-And you will need the following modules to trian and test line simplification network:
+And you will need the following modules to train and test line simplification network:
 
 - pytorch
 
+You can install these dependencies via [Anaconda](https://www.anaconda.com/products/individual) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html).
+Miniconda is faster to install. (On Windows, choose the 64-bit Python 3.x version. Launch the Anaconda shell from the Start menu and navigate to this directory.)
+Then:
+
+    conda env create -f environment.yml
+    conda activate flatting
+
+To update an already created environment if the `environment.yml` file changes or to change environments, activate and then run `conda env update --file environment.yml --prune`.
 
 ### 2. Download pertrained models
 Download the [pertrained network model]() and put it into `./`, then:

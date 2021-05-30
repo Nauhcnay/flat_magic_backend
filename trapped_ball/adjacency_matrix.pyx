@@ -120,3 +120,42 @@ cpdef long[:] region_sizes_internal( long[:,:] image, long[:] sizes ) nogil:
             sizes[region] += 1
     
     return sizes
+
+def remap_labels( image, remaps ):
+    '''
+    Given:
+        image: A 2D image of integer labels in the range [0,len(remaps)].
+        remaps: A 1D array of integer remappings that occurred.
+    Returns:
+        image_remapped: An array the same size as `image` except labels have been
+                        remapped according to `remaps`.
+    '''
+    
+    import numpy as np
+    image_remapped = image.copy().astype( int )
+    remaps = remaps.astype( int )
+    remap_labels_internal( image_remapped, remaps )
+    return image_remapped
+
+cpdef long remap_labels_internal( long[:,:] image, long[:] remaps ) nogil:
+    '''
+    Given:
+        image: A 2D image of integer labels in the range [0,len(remaps)].
+        remaps: A 1D array of integer remappings that occurred.
+    Modifies in-place:
+        image: `image` with labels remapped according to `remaps`.
+    '''
+    
+    cdef long nrow = image.shape[0]
+    cdef long ncol = image.shape[1]
+    cdef long i,j,region
+    
+    ## Sweep with left-right neighbors. Skip the right-most column.
+    for i in range(nrow):
+        for j in range(ncol):
+            region = image[i,j]
+            while remaps[region] != region:
+                image[i,j] = remaps[region]
+                region = remaps[region]
+    
+    return i

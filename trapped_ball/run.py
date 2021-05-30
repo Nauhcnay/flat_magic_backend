@@ -364,7 +364,194 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
 
     return result
 
+def merge_small_fast(fill_map_ref, fill_map_source, th):
+    '''
+    Given:
+        fill_map_ref: A width-by-height array of integer labels.
+        fill_map_source: Another width-by-height array of integer labels.
+        th: A threshold for a connected component sizes.
+    Returns:
+        
+    '''
+    
+    fill_map_source = fill_map_source.copy()
+    fill_map_ref = fill_map_ref.copy()
+
+    num_regions = len(np.unique(fill_map_source))
+    
+    # the definition of long int is different on windows and linux
+    try:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int32), num_regions)
+    except:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
+
+    r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+    
+    
+    
+    ## Labels should be contiguous.
+    assert len(r_idx_source) == max(r_idx_source)+1
+    ## A should have the same dimensions as number of labels.
+    assert A.shape[0] == A.shape[1]
+    assert A.shape[0] == len( r_idx_source )
+    ARTIST_LINE_LABEL = 0
+    def get_small_region(r_idx_source, r_count_source, th):
+        return set(
+            # 1. size less that threshold
+            r_idx_source[ r_count_source < th ]
+            ) | set(
+            # 2. not the neighbor of artist line
+            ## Which of `r_idx_source` have a 0 in the adjacency position for `ARTIST_LINE_LABEL`?
+            r_idx_source[ A[r_idx_source,ARTIST_LINE_LABEL] == 0 ]
+            )
+    
+    r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+    
+    stop = False
+    
+    while len(r_idx_source_small) > 0 and stop == False:
+        
+        stop = True
+
+        for s in r_idx_source_small:
+            if s == ARTIST_LINE_LABEL: continue
+
+            neighbors = np.where(A[s,:] == 1)[0]
+            
+            # remove line regions
+            neighbors = neighbors[neighbors != ARTIST_LINE_LABEL]
+
+            # skip if this region doesn't have neighbors
+            if len(neighbors) == 0: continue
+            
+            # find region size 
+            # sizes = np.array([get_size(r_idx_source, r_count_source, n) for n in neighbors]).flatten()
+            sizes = r_count_source[ neighbors ]
+
+            # merge regions if necessary
+            largest_index = np.argmax(sizes)
+            if neighbors[largest_index] == ARTIST_LINE_LABEL and len(neighbors) > 1:
+                # if its largest neighbor is line skip it
+                del neighbors[ largest_index ]
+                del sizes[ largest_index ]
+            
+            if len(neighbors) >= 1:
+                label_mask = fill_map_source == s
+                max_neighbor = neighbors[np.argmax(sizes)]
+                A = update_adj_matrix(A, s, max_neighbor)
+                fill_map_source[label_mask] = max_neighbor
+                stop = False
+            else:
+                continue
+        
+        r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+        r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+
+    return fill_map_source
+
+def merge_small_fast2(fill_map_ref, fill_map_source, th):
+    '''
+    Given:
+        fill_map_ref: A width-by-height array of integer labels.
+        fill_map_source: Another width-by-height array of integer labels.
+        th: A threshold for a connected component sizes.
+    Returns:
+        
+    '''
+    
+    fill_map_source = fill_map_source.copy()
+    fill_map_ref = fill_map_ref.copy()
+
+    num_regions = len(np.unique(fill_map_source))
+    
+    # the definition of long int is different on windows and linux
+    try:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int32), num_regions)
+    except:
+        A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
+
+    r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+    
+    
+    ## Labels should be contiguous.
+    assert len(r_idx_source) == max(r_idx_source)+1
+    ## A should have the same dimensions as number of labels.
+    assert A.shape[0] == A.shape[1]
+    assert A.shape[0] == len( r_idx_source )
+    ARTIST_LINE_LABEL = 0
+    def get_small_region(r_idx_source, r_count_source, th):
+        return set(
+            # 1. size less that threshold
+            r_idx_source[ r_count_source < th ]
+            ) | set(
+            # 2. not the neighbor of artist line
+            ## Which of `r_idx_source` have a 0 in the adjacency position for `ARTIST_LINE_LABEL`?
+            r_idx_source[ A[r_idx_source,ARTIST_LINE_LABEL] == 0 ]
+            )
+    
+    r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+    
+    remap = arange(len(r_idx_source))
+    
+    stop = False
+    
+    while len(r_idx_source_small) > 0 and stop == False:
+        
+        stop = True
+
+        for s in r_idx_source_small:
+            if s == ARTIST_LINE_LABEL: continue
+
+            neighbors = np.where(A[s,:] == 1)[0]
+            
+            # remove line regions
+            neighbors = neighbors[neighbors != ARTIST_LINE_LABEL]
+
+            # skip if this region doesn't have neighbors
+            if len(neighbors) == 0: continue
+            
+            # find region size 
+            # sizes = np.array([get_size(r_idx_source, r_count_source, n) for n in neighbors]).flatten()
+            sizes = r_count_source[ neighbors ]
+
+            # merge regions if necessary
+            largest_index = np.argmax(sizes)
+            if neighbors[largest_index] == ARTIST_LINE_LABEL and len(neighbors) > 1:
+                # if its largest neighbor is line skip it
+                del neighbors[ largest_index ]
+                del sizes[ largest_index ]
+            
+            if len(neighbors) >= 1:
+                max_neighbor = neighbors[np.argmax(sizes)]
+                A = update_adj_matrix(A, s, max_neighbor)
+                remap[s] = max_neighbor
+                r_count_source[max_neighbor] = r_count_source[max_neighbor] + r_count_source[s]
+                del r_count_source[s]
+                del r_idx_source[s]
+                stop = False
+            else:
+                continue
+        
+        r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+    
+    remap_labels( fill_map_source, remap )
+    
+    return fill_map_source
+
 def merge_small(fill_map_ref, fill_map_source, th):
+    '''
+    Given:
+        fill_map_ref: A width-by-height array of integer labels.
+        fill_map_source: Another width-by-height array of integer labels.
+        th: A threshold for a connected component sizes.
+    Returns:
+        
+    '''
+    
+    result_fast1 = merge_small_fast(fill_map_ref, fill_map_source, th)
+    result_fast2 = merge_small_fast2(fill_map_ref, fill_map_source, th)
+    assert ( result_fast1 == result_fast2 ).all()
+    return result_fast2
     
     fill_map_source = fill_map_source.copy()
     fill_map_ref = fill_map_ref.copy()
@@ -434,6 +621,7 @@ def merge_small(fill_map_ref, fill_map_source, th):
         r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
         r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
 
+    assert ( fill_map_source == result_fast ).all()
     return fill_map_source
 
 def get_size(idx, count, r):
