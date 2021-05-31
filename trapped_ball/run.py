@@ -208,18 +208,18 @@ def region_get_map(path_to_line_sim,
     fillmap_neural_fullsize_c = fillmap_neural_fullsize.copy()
 
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
-    fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize)
+    fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize)
 
     fillmap_artist_fullsize = fillmap_cartesian_product(fillmap_artist_fullsize_c, fillmap_neural_fullsize)
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
     
     # re-order both fillmaps
-    fillmap_artist_fullsize = verify_reigon(fillmap_artist_fullsize, True)
-    # fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize, True)
+    fillmap_artist_fullsize = verify_region(fillmap_artist_fullsize, True)
+    # fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
     
     fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.0002)
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
-    fillmap_neural_fullsize = verify_reigon(fillmap_neural_fullsize, True)
+    fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
     
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
@@ -284,7 +284,7 @@ def fillmap_cartesian_product(fill1, fill2):
 
 
 # verify if there is no isolate sub-region in each reigon, if yes, split it and assign a new region id    
-def verify_reigon(fillmap, reorder_only=False):
+def verify_region(fillmap, reorder_only=False):
     fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
 
