@@ -284,6 +284,7 @@ def fillmap_cartesian_product(fill1, fill2):
 
 
 # verify if there is no isolate sub-region in each region, if yes, split it and assign a new region id    
+# Yotam: Can this function be replaced with a single call to cv2.connectedComponents()?
 def verify_region(fillmap, reorder_only=False):
     fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
