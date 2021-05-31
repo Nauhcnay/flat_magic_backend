@@ -137,7 +137,7 @@ def remap_labels( image, remaps ):
     remap_labels_internal( image_remapped, remaps )
     return image_remapped
 
-cpdef long remap_labels_internal( long[:,:] image, long[:] remaps ) nogil:
+cpdef void remap_labels_internal( long[:,:] image, long[:] remaps ) nogil:
     '''
     Given:
         image: A 2D image of integer labels in the range [0,len(remaps)].
@@ -158,4 +158,4 @@ cpdef long remap_labels_internal( long[:,:] image, long[:] remaps ) nogil:
                 image[i,j] = remaps[region]
                 region = remaps[region]
     
-    return i
+    return

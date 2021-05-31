@@ -471,6 +471,9 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
         A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
 
     r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
+    ## Convert them to masked arrays
+    r_idx_source = np.ma.masked_array( r_idx_source )
+    r_count_source = np.ma.masked_array( r_count_source )
     
     
     ## Labels should be contiguous.
@@ -482,16 +485,16 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
     def get_small_region(r_idx_source, r_count_source, th):
         return set(
             # 1. size less that threshold
-            r_idx_source[ r_count_source < th ]
+            r_idx_source[ r_count_source < th ].compressed()
             ) | set(
             # 2. not the neighbor of artist line
             ## Which of `r_idx_source` have a 0 in the adjacency position for `ARTIST_LINE_LABEL`?
-            r_idx_source[ A[r_idx_source,ARTIST_LINE_LABEL] == 0 ]
+            r_idx_source[ A[r_idx_source,ARTIST_LINE_LABEL] == 0 ].compressed()
             )
     
     r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
     
-    remap = arange(len(r_idx_source))
+    remap = np.arange(len(r_idx_source))
     
     stop = False
     
@@ -526,15 +529,15 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
                 A = update_adj_matrix(A, s, max_neighbor)
                 remap[s] = max_neighbor
                 r_count_source[max_neighbor] = r_count_source[max_neighbor] + r_count_source[s]
-                del r_count_source[s]
-                del r_idx_source[s]
+                r_count_source[s] = np.ma.masked
+                r_idx_source[s] = np.ma.masked
                 stop = False
             else:
                 continue
         
         r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
     
-    remap_labels( fill_map_source, remap )
+    adjacency_matrix.remap_labels( fill_map_source, remap )
     
     return fill_map_source
 
@@ -551,7 +554,7 @@ def merge_small(fill_map_ref, fill_map_source, th):
     result_fast1 = merge_small_fast(fill_map_ref, fill_map_source, th)
     result_fast2 = merge_small_fast2(fill_map_ref, fill_map_source, th)
     assert ( result_fast1 == result_fast2 ).all()
-    return result_fast2
+    return result_fast1
     
     fill_map_source = fill_map_source.copy()
     fill_map_ref = fill_map_ref.copy()
@@ -912,6 +915,7 @@ if __name__ == '__main__':
     parser.add_argument("--exp1", action = 'store_true', help="experiment of exploring the parameter")    
     parser.add_argument("--exp3", action = 'store_true', help="experiment of exploring the parameter")
     parser.add_argument("--exp4", action = 'store_true', help="experiment of exploring the parameter")    
+    parser.add_argument("--exp5", action = 'store_true', help="experiment of exploring the parameter")
     parser.add_argument('--input', type=str, default="./flatting/line_white_background/image0001_line.png",
                         help = "path to input image, support png file only")
     parser.add_argument('--output', type=str, default="./exp1",
@@ -935,6 +939,18 @@ if __name__ == '__main__':
         # let's test 2 pass merge
         line = "./examples/01.png"
         line_sim = "./examples/01_sim.png"
+        # trappedball_2pass_exp(line, line_sim)
+        region_get_map(line_sim, 
+                path_to_line_artist=line,
+                output_path='./', 
+                radius_set=[1],
+                percentiles=[0], 
+                visualize_steps=False,
+                return_numpy=False)
+    elif args.exp5:
+        # let's test 2 pass merge
+        line = "./examples/tiny.png"
+        line_sim = "./examples/tiny_sim.png"
         # trappedball_2pass_exp(line, line_sim)
         region_get_map(line_sim, 
                 path_to_line_artist=line,
