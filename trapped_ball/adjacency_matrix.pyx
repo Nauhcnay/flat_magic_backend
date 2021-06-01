@@ -154,6 +154,8 @@ cpdef void remap_labels_internal( long[:,:] image, long[:] remaps ) nogil:
     for i in range(nrow):
         for j in range(ncol):
             region = image[i,j]
+            # I see, the merge operation likes a chain, we need to apply all of them one by one
+            # or we can apply this on remaps frist, I'm not sure which one will be faster.
             while remaps[region] != region:
                 image[i,j] = remaps[region]
                 region = remaps[region]

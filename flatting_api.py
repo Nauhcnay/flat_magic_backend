@@ -6,7 +6,7 @@ from multiprocessing import Process, Queue
 
 from os.path import *
 sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
-from run import region_get_map, merge_to_ref, verify_reigon
+from run import region_get_map, merge_to_ref, verify_region
 from predict import predict_img
 from thinning import thinning
 from unet import UNet
@@ -113,7 +113,7 @@ def fillmap_masked_line(fill_map, line_input=None):
     # get the one-pixel width edge
     edges = cv2.Canny(fill_map.astype(np.uint8), 0, 0)
     
-    if line_input != None:
+    if line_input is not None:
         # increase the width of edge line
         kernel = np.ones((5,5),np.uint8)
         edges = cv2.dilate(edges, kernel, iterations = 2)
@@ -209,7 +209,7 @@ def run_single(line_artist, net, radius, preview=False):
 
     # color fill map for visualize
     drop_small_regions(fill_map_artist)
-    fill_map_artist = verify_reigon(fill_map_artist, True)
+    fill_map_artist = verify_region(fill_map_artist, True)
     
 
     fill, _ = show_fillmap_auto(fill_map)
@@ -493,7 +493,6 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
 
     # merge user modify to lines
     line_artist[split_map_manual < 240] = 0
-    
 
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual)
@@ -531,16 +530,16 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
             else:
                 masks.append(split_regions == s)
 
-    # split regions
-    next_label = fill_map.max() + 1
-    for mask in masks:
-        if is_split_safe(mask, split_map_manual):
-            fill_map[mask] = next_label
-            next_label += 1
-    fill_map[line_artist < 240] = 0
-    fill_map[mask_old] = label_old
-    fill_map[split_map_manual < 240] = label_old
-    fill_map = thinning(fill_map)
+        # split regions
+        next_label = fill_map.max() + 1
+        for mask in masks:
+            if is_split_safe(mask, split_map_manual):
+                fill_map[mask] = next_label
+                next_label += 1
+        fill_map[line_artist < 240] = 0
+        fill_map[mask_old] = label_old
+        fill_map[split_map_manual < 240] = label_old
+        fill_map = thinning(fill_map)
 
     # update neural line
     neural_line = fillmap_masked_line(fill_map, line_artist)

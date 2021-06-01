@@ -269,8 +269,9 @@ def fillmap_cartesian_product(fill1, fill2):
 
     # regnerate all region labels
     labels, inv = np.unique(fill_c.reshape(-1, 2), return_inverse=True, axis=0)
-    labels = tuple(map(tuple, labels))
+    labels = tuple(map(tuple, labels)) # convert array to tuple
     
+    # assign a number lable to each cartesian product tuple
     l_to_r = {}
     for i in range(len(labels)):
         l_to_r[labels[i]] = i+1
@@ -285,11 +286,16 @@ def fillmap_cartesian_product(fill1, fill2):
 
 # verify if there is no isolate sub-region in each region, if yes, split it and assign a new region id    
 # Yotam: Can this function be replaced with a single call to cv2.connectedComponents()?
+# Chuan: I think no, to find the bleeding regions on the bounderay, iteratively flood fill each region is necessary
 def verify_region(fillmap, reorder_only=False):
     fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
-
-    # split region 
+    h, w = fillmap.shape
+    # split region
+    # is this really necessary？
+    # yes, without this snippet, the result will be bad at line boundary
+    # intuitively, this is like an "alingment" of smaller neural fill map to the large original line art
+    # is it possible to crop the image before connectedComponents filling?
     next_label = labels.max() + 1
     if reorder_only == False:
         print("Log:\tsplit isolate regions in fillmap")
@@ -298,8 +304,34 @@ def verify_region(fillmap, reorder_only=False):
             # inital input fill map
             region = np.ones(fillmap.shape, dtype=np.uint8)
             region[fillmap != r] = 0
-            # try to split region
+            '''
+            seems this get the speed even slower, sad
+            need to find a better way
+            '''
+            # # try to split region
+            # def find_bounding_box(region):
+            #     # find the pixel coordination of this region       
+            #     points = np.array(np.where(region == 1)).T
+            #     t = points[:,0].min() # top
+            #     l = points[:,1].min() # left
+            #     b = points[:,0].max() # bottom
+            #     r = points[:,1].max() # right
+            #     return t, l, b, r
+            # t, l, b, r = find_bounding_box(region)
+            # region_cropped = region[t:b+1, l:r+1]
+            # # fill_map_corpped = fill_map[t:b+1, l:r+1]
+
             _, region_verify = cv2.connectedComponents(region, connectivity=8)
+            
+            '''
+            seems this get the speed even slower, sad
+            '''
+            # padding 0 back to the region
+            # region_padded = cv2.copyMakeBorder(region_verify, t, h-b-1, l, w-r-1, cv2.BORDER_CONSTANT, 0)
+            # assert region_padded.shape == fillmap.shape
+            # region_verify = region_padded
+
+
             # split region if necessary
             label_verify = np.unique(region_verify)
             if len(label_verify) > 2: # skip 0 and the first region
@@ -348,6 +380,8 @@ def update_adj_matrix(A, source, target):
 
 def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
     
+    # this could be imporved as well
+    # r_idx is the region labels
     F = {} #mapping of large region to ref region
     for i in range(len(r_idx)):
         r = r_idx[i]
@@ -367,11 +401,7 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
 
 def merge_small_fast(fill_map_ref, fill_map_source, th):
     '''
-    Given:
-        fill_map_ref: A width-by-height array of integer labels.
-        fill_map_source: Another width-by-height array of integer labels.
-        th: A threshold for a connected component sizes.
-    Returns:
+    OK let's understand the improved version
         
     '''
     
@@ -448,16 +478,18 @@ def merge_small_fast(fill_map_ref, fill_map_source, th):
         r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
         r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
 
+        '''
+        for debug
+        after the first for loop, these 3 variable should have exactly same value compare to the merge_small_fast2's result
+        '''
+        # return r_idx_source_small, r_idx_source, r_count_source
+        # return fill_map_source
+
     return fill_map_source
 
 def merge_small_fast2(fill_map_ref, fill_map_source, th):
     '''
-    Given:
-        fill_map_ref: A width-by-height array of integer labels.
-        fill_map_source: Another width-by-height array of integer labels.
-        th: A threshold for a connected component sizes.
-    Returns:
-        
+
     '''
     
     fill_map_source = fill_map_source.copy()
@@ -473,6 +505,7 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
 
     r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
     ## Convert them to masked arrays
+    # why?
     r_idx_source = np.ma.masked_array( r_idx_source )
     r_count_source = np.ma.masked_array( r_count_source )
     
@@ -495,6 +528,8 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
     
     r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
     
+    # since the region labels are always continous numbers, so it is safe to create a remap array like this
+    # in other word, r_idx_source.max() + 1 == len(r_idx_source)
     remap = np.arange(len(r_idx_source))
     
     stop = False
@@ -528,8 +563,11 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
             if len(neighbors) >= 1:
                 max_neighbor = neighbors[np.argmax(sizes)]
                 A = update_adj_matrix(A, s, max_neighbor)
+                # record the operation of merge
                 remap[s] = max_neighbor
+                # update the region size
                 r_count_source[max_neighbor] = r_count_source[max_neighbor] + r_count_source[s]
+                # remove the merged region, however, we should keep the index unchanged
                 r_count_source[s] = np.ma.masked
                 r_idx_source[s] = np.ma.masked
                 stop = False
@@ -537,26 +575,37 @@ def merge_small_fast2(fill_map_ref, fill_map_source, th):
                 continue
         
         r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
+
+        '''
+        for debug
+        after the first for loop, these 3 variable should have exactly same value compare to the merge_small_fast2's result
+        '''
+        # return r_idx_source_small, r_idx_source, r_count_source
+        # adjacency_matrix.remap_labels( fill_map_source, remap )
+        # return fill_map_source
     
-    adjacency_matrix.remap_labels( fill_map_source, remap )
+    fill_map_source = adjacency_matrix.remap_labels( fill_map_source, remap )
     
     return fill_map_source
 
 def merge_small(fill_map_ref, fill_map_source, th):
     '''
     Given:
-        fill_map_ref: A width-by-height array of integer labels.
-        fill_map_source: Another width-by-height array of integer labels.
-        th: A threshold for a connected component sizes.
+        fill_map_ref: 2D numpy array as neural fill map on neural line
+        fill_map_source: Connected commponent fill map on artist line
+        th: A threshold to identify small regions 
     Returns:
         
     '''
     
-    result_fast1 = merge_small_fast(fill_map_ref, fill_map_source, th)
-    result_fast2 = merge_small_fast2(fill_map_ref, fill_map_source, th)
-    assert ( result_fast1 == result_fast2 ).all()
-    return result_fast1
+    # result_fast1 = merge_small_fast(fill_map_ref, fill_map_source, th)
+    # result_fast2 = merge_small_fast2(fill_map_ref, fill_map_source, th)
+    # assert ( result_fast1 == result_fast2 ).all()
+    # r1, r2, r3 = merge_small_fast(fill_map_ref, fill_map_source, th)
+    # s1, s2, s3 = merge_small_fast2(fill_map_ref, fill_map_source, th)
+    # return result_fast1
     
+    # make a copy of input, we don't want to affect the array outside of this function
     fill_map_source = fill_map_source.copy()
     fill_map_ref = fill_map_ref.copy()
 
@@ -568,33 +617,44 @@ def merge_small(fill_map_ref, fill_map_source, th):
     except:
         A = adjacency_matrix.adjacency_matrix(fill_map_source.astype(np.int64), num_regions)
 
+    # find the label and size of each region
     r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
     
     def get_small_region(r_idx_source, r_count_source, th):
+        '''
+        Find the 'small' region that need to be merged to its neighbor
+        '''
         r_idx_source_small = []
         for i in range(len(r_idx_source)):
         # there are two kinds of region should be identified as small region:
-            # 1. size less that threshold
+            # 1. size less the threshold
             if r_count_source[i] < th:
                 r_idx_source_small.append(r_idx_source[i])
-            # 2. not the neighbor of artist line
+            # 2. not the neighbor of artist line, this type of region is not adjecent to any stroke lines, 
+            # so it need to be merged to a neighbor which touch the strokes no matter how big it is
             n = np.where(A[r_idx_source[i],:] == 1)[0]
             if 0 not in n:
                 r_idx_source_small.append(r_idx_source[i])
         return r_idx_source_small
 
+    # find the small regions that need to be merged
     r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
     
+    # early stop sign
     stop = False
     
+    # main loop to iteratively merge all small regions into its largest neighbor
     while len(r_idx_source_small) > 0 and stop == False:
         
         stop = True
-
+        # each time process small regions in the list sequentially
         for s in r_idx_source_small:
             if s == 0: continue
 
+            # get the pixel mask of region s
             label_mask = fill_map_source == s
+            
+            # find all neighbors of region s
             neighbors = np.where(A[s,:] == 1)[0]
             
             # remove line regions
@@ -603,10 +663,10 @@ def merge_small(fill_map_ref, fill_map_source, th):
             # skip if this region doesn't have neighbors
             if len(neighbors) == 0: continue
             
-            # find region size 
+            # find region size of s's neighbors
             sizes = np.array([get_size(r_idx_source, r_count_source, n) for n in neighbors]).flatten()
 
-            # merge regions if necessary
+            # merge regions s to its largest neighbor
             if neighbors[np.argsort(sizes)[-1]] == 0 and len(neighbors) > 1:
                 # if its largest neighbor is line skip it
                 max_neighbor = neighbors[np.argsort(sizes)[-2]]
@@ -621,11 +681,12 @@ def merge_small(fill_map_ref, fill_map_source, th):
                 stop = False
             else:
                 continue
-                
+        
+        # re-search the small regions for next loop
         r_idx_source, r_count_source = np.unique(fill_map_source, return_counts=True)
         r_idx_source_small = get_small_region(r_idx_source, r_count_source, th)
 
-    assert ( fill_map_source == result_fast ).all()
+    # assert ( fill_map_source == result_fast2 ).all()
     return fill_map_source
 
 def get_size(idx, count, r):
@@ -636,8 +697,8 @@ def get_size(idx, count, r):
 
 def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
 
-    fill_map_ref = fill_map_ref.copy()
-    fill_map_source = fill_map_source.copy()
+    fill_map_ref = fill_map_ref.copy() # connected compoenent fill map
+    fill_map_source = fill_map_source.copy() # the cartesian product of connected component and neural fill map
 
     w, h = fill_map_ref.shape
     th = int(w * h * th)
@@ -646,9 +707,12 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     # 1. merge small regions which has neighbors
     # the int64 means long on linux but long long on windows, sad
     print("Log:\tmerge small regions")
-    fill_map_source = merge_small(fill_map_ref, fill_map_source, th)
+    fill_map_source = merge_small_fast2(fill_map_ref, fill_map_source, th)
     
     # 2. merge large regions
+    # now the fill_map_source is clean, no bleeding. but it still contains many "broken" pieces which 
+    # should belong to the same semantical regions. So, we can merge these "large but still broken" region
+    # together by the neural fill map.
     print("Log:\tmerge large regions")
     r_idx_source= np.unique(fill_map_source)
     result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
