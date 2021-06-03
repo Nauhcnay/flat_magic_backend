@@ -79,8 +79,9 @@ async def flatsingle( request ):
     net = str(data['net'])
     radii = int(data['radius'])
     preview = data['preview']
+    resize = data['resize']
 
-    flatted = flatting_api.run_single(img, net, radii, preview)
+    flatted = flatting_api.run_single(img, net, radii, resize, preview)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
@@ -107,7 +108,7 @@ async def merge( request ):
     line_artist = to_pil(data['line_artist'])
     fill_neural = np.array(to_pil(data['fill_neural']))
     fill_artist = np.array(to_pil(data['fill_artist']))
-    stroke = np.array(to_pil(data['stroke']))
+    stroke = to_pil(data['stroke'])
     # palette = np.array(data['palette'])
     
     merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
