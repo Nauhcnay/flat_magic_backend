@@ -27,7 +27,7 @@ Then:
 To update an already created environment if the `environment.yml` file changes or to change environments, activate and then run `conda env update --file environment.yml --prune`.
 
 ### 2. Download pertrained models
-Download the [pertrained network model]() and put it into `./`, then:
+Download the [pertrained network model](https://drive.google.com/file/d/15l3wPO4WbMk0DmqR7reSU1mHzOaaBCfQ/view?usp=sharing) and put it into `./`, then:
 
 `unzip checkpoints.zip`
 
