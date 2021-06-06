@@ -7,9 +7,9 @@ from multiprocessing import Process, Queue
 from os.path import *
 sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 from run import region_get_map, merge_to_ref, verify_region
-from predict import predict_img
+from .predict import predict_img
 from thinning import thinning
-from unet import UNet
+from .unet import UNet
 from PIL import Image
 
 # global variables shared by all api functions

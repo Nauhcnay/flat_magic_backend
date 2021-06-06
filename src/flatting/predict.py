@@ -13,8 +13,8 @@ import cv2
 from PIL import Image
 from torchvision import transforms as T
 
-from unet import UNet
-from utils.preprocessing import to_point_list, find_bbox, crop_img
+from .unet import UNet
+from .utils.preprocessing import to_point_list, find_bbox, crop_img
 from run import region_get_map
 
 

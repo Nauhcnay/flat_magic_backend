@@ -1,0 +1,33 @@
+[tool.briefcase]
+project_name = "Flatting"
+bundle = "edu.gmu.cs.cragl.flatting"
+version = "0.0.1"
+url = "https://cragl.cs.gmu.edu/flatting"
+license = "Proprietary"
+author = 'Chuan Yan'
+author_email = "cyan3@gmu.edu"
+
+[tool.briefcase.app.flatting]
+formal_name = "Flatting"
+description = "Back-end for Photoshop flatting plugin"
+icon = "src/flatting/resources/flatting"
+sources = ['src/flatting']
+requires = []
+
+
+[tool.briefcase.app.flatting.macOS]
+requires = []
+
+[tool.briefcase.app.flatting.linux]
+requires = []
+system_requires = []
+
+[tool.briefcase.app.flatting.windows]
+requires = []
+
+# Mobile deployments
+[tool.briefcase.app.flatting.iOS]
+requires = []
+
+[tool.briefcase.app.flatting.android]
+requires = []

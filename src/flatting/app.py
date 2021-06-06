@@ -3,7 +3,7 @@ from PIL import Image
 from io import BytesIO
 
 import numpy as np
-import flatting_api
+from . import flatting_api
 import base64
 import io
 import json
@@ -199,11 +199,15 @@ def to_pil(byte):
     byte = base64.b64decode(byte)
     return Image.open(BytesIO(byte))
 
-app = web.Application(client_max_size = 1024 * 1024 ** 2)
-app.add_routes(routes)
+def main():
+    app = web.Application(client_max_size = 1024 * 1024 ** 2)
+    app.add_routes(routes)
+    
+    # ToDo: start two server
+    web.run_app(app)
+    
+    ## From JavaScript:
+    # let result = await fetch( url_of_server.py, { method: 'POST', body: JSON.stringify(data) } ).json();
 
-# ToDo: start two server
-web.run_app(app)
-
-## From JavaScript:
-# let result = await fetch( url_of_server.py, { method: 'POST', body: JSON.stringify(data) } ).json();
+if __name__ == '__main__':
+    main()
