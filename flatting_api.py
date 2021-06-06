@@ -334,6 +334,37 @@ def to_fillmap(image):
 
     return fill_map, np.array(palette)
 
+def select_labels(fill_map, stroke_mask):
+    split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
+    
+    
+    # criteria 1: the absolute size of merge stroke in each region should large enough. 
+    DEBUG = True
+    if DEBUG:
+        print("Log\tgot stroke size as %s"%str(split_labels_count))
+    criteria1 = split_labels_count > split_labels_count.sum() * 0.1
+
+    # criteria 2: the releative size of merge stroke in each region should be ballance, region which
+    # covered by small merge stroke size will be discard
+    criteria2 = split_labels_count / split_labels_count.max()
+    if DEBUG:
+        print("Log\tgot stroke region ratio size as %s"%str(criteria2))
+    criteria2 = criteria2 > 0.15
+
+    # criteria 3: if the region has been covered by more than 1/3, always split it
+    criteria3 = []
+    for i, sl in enumerate(split_labels):
+        criteria3.append(split_labels_count[i] / (fill_map==sl).sum())
+    criteria3 = np.array(criteria3)
+    
+    if DEBUG:
+        print("Log:\tgot stroke/region as: %s"%str(criteria3))
+    criteria3 = criteria3 > 0.3
+
+    # select region that really need to be splited
+    split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria3)]
+    return split_labels
+
 def merge(fill_neural, fill_artist, merge_map, line_artist):
     '''
     Given:
@@ -369,36 +400,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                 if l == 0: continue # skip background
                 stroke_mask = stroke_map == l
                 
-                def select_labels(fill_map, stroke_mask):
-                    split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
-                    
-                    
-                    # criteria 1: the absolute size of merge stroke in each region should large enough. 
-                    DEBUG = True
-                    if DEBUG:
-                        print("Log\tgot stroke size as %s"%str(split_labels_count))
-                    criteria1 = split_labels_count > split_labels_count.sum() * 0.1
-
-                    # criteria 2: the releative size of merge stroke in each region should be ballance, region which
-                    # covered by small merge stroke size will be discard
-                    criteria2 = split_labels_count / split_labels_count.max()
-                    if DEBUG:
-                        print("Log\tgot stroke region ratio size as %s"%str(criteria2))
-                    criteria2 = criteria2 > 0.15
-
-                    # criteria 3: if the region has been covered by more than 1/3, always split it
-                    criteria3 = []
-                    for i, sl in enumerate(split_labels):
-                        criteria3.append(split_labels_count[i] / (fill_map==sl).sum())
-                    criteria3 = np.array(criteria3)
-                    
-                    if DEBUG:
-                        print("Log:\tgot stroke/region as: %s"%str(criteria3))
-                    criteria3 = criteria3 > 0.3
-
-                    # select region that really need to be splited
-                    split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria3)]
-                    return split_labels
+                
 
                 split_labels_artist = select_labels(fill_map_artist, stroke_mask)
 
@@ -778,7 +780,7 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
     '''
     Given:
         fill_map, labeled region map
-        merge_map, a image contains stroke only, assume it is image stored as numpy array
+        stroke_map, a numpy array that contains select strokes with the same color
     Return:
         the region index of which are selected by stroke map
     '''
@@ -789,20 +791,35 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
     stroke[stroke_map < 250] = 0
     stroke[stroke_map >= 250] = 1
 
-    # get the labels selected by stroke map
-    # definitely, this rule need to be imporved
+    
     labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
     if precise == False:
-        labels_ratio = labels_count / labels_count.max()
-        criteria1 = labels_ratio > 0.1
-        criteria2 = labels_count > 256
-        if (stroke == 0).sum() > 64**2:
-            labels = labels[np.logical_or(criteria1, criteria2)]
-        else:
-            labels = labels[np.logical_and(criteria1, criteria2)]
-    # labels = labels[labels != 0]
-
+        _, smap = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
+        stroke_label = np.unique(smap)
+        labels_new = []
+        for l in stroke_label:
+            mask = smap == l
+            labels_new.append(select_labels(fill_map, mask))
+        labels = np.unique(np.concatenate(labels_new))
     return labels
+
+    '''
+    Old codes of the label seletcion
+    '''
+    # # get the labels selected by stroke map
+    # # definitely, this rule need to be imporved
+    # labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
+    # if precise == False:
+    #     labels_ratio = labels_count / labels_count.max()
+    #     criteria1 = labels_ratio > 0.1
+    #     criteria2 = labels_count > 256
+    #     if (stroke == 0).sum() > 64**2:
+    #         labels = labels[np.logical_or(criteria1, criteria2)]
+    #     else:
+    #         labels = labels[np.logical_and(criteria1, criteria2)]
+    # # labels = labels[labels != 0]
+
+    # return labels
 
 def display_region(fill_map, region):
     '''
