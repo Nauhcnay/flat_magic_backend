@@ -361,24 +361,50 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
         # merge_labels = stroke_to_label(fill_map, stroke)
 
         def split_in_merge(stroke, fill_map, fill_map_artist):
+            new_labels = []
             # split to each single stroke in each stroke group
             _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
             stroke_label = np.unique(stroke_map)
             for l in stroke_label:
                 if l == 0: continue # skip background
-                split_labels_artist, split_labels_artist_count = np.unique(fill_map_artist[stroke_map == l], return_counts=True)
+                stroke_mask = stroke_map == l
                 
-                # criteria 1: rule out all regions which contains merge strokes greater than size 64 ** 2 
-                criteria1 = split_labels_artist_count < 64 ** 2
+                def select_labels(fill_map, stroke_mask):
+                    split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
+                    
+                    
+                    # criteria 1: the absolute size of merge stroke in each region should large enough. 
+                    DEBUG = True
+                    if DEBUG:
+                        print("Log\tgot stroke size as %s"%str(split_labels_count))
+                    criteria1 = split_labels_count > split_labels_count.sum() * 0.1
 
-                # criteria 2: rule out all regions which contain less than 5% of pixels to the overall stroke size,
-                split_labels_artist_count = split_labels_artist_count / split_labels_artist_count.max()
-                criteria2 = split_labels_artist_count > 0.3
+                    # criteria 2: the releative size of merge stroke in each region should be ballance, region which
+                    # covered by small merge stroke size will be discard
+                    criteria2 = split_labels_count / split_labels_count.max()
+                    if DEBUG:
+                        print("Log\tgot stroke region ratio size as %s"%str(criteria2))
+                    criteria2 = criteria2 > 0.15
 
-                # select region that really need to be splited
-                split_labels_artist = split_labels_artist[np.logical_and(criteria1, criteria2)]
+                    # criteria 3: if the region has been covered by more than 1/3, always split it
+                    criteria3 = []
+                    for i, sl in enumerate(split_labels):
+                        criteria3.append(split_labels_count[i] / (fill_map==sl).sum())
+                    criteria3 = np.array(criteria3)
+                    
+                    if DEBUG:
+                        print("Log:\tgot stroke/region as: %s"%str(criteria3))
+                    criteria3 = criteria3 > 0.3
+
+                    # select region that really need to be splited
+                    split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria3)]
+                    return split_labels
+
+                split_labels_artist = select_labels(fill_map_artist, stroke_mask)
+
                 if len(split_labels_artist) > 0:
-                    fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
+                    fill_map, new_label = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
+                    new_labels += new_label
 
                 '''
                 The old split code
@@ -386,10 +412,13 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                 # if (stroke_size < 64**2 and len(split_labels_artist) == 1):
                 #     fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
 
+            # refine new_labels
+            for r in new_labels:
+                if r not in fill_map:
+                    new_labels.remove(r)
+            return fill_map, np.array(new_labels)
 
-            return fill_map
-
-        fill_map = split_in_merge(stroke, fill_map, fill_map_artist)
+        fill_map, new_labels = split_in_merge(stroke, fill_map, fill_map_artist)
         
         # split this region in fill artist into a different region
 
@@ -403,22 +432,23 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
 
         # need to update merge label again
         merge_labels = stroke_to_label(fill_map, stroke)
-
+        merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
         # update palette if the max label has greater than the size of the palette
-        if len(np.unique(fill_map)) >= len(palette):
-            palette = init_palette(len(np.unique(fill_map)), palette)
+        if fill_map.max() >= len(palette):
+            palette = init_palette(fill_map.max()+1, palette)
 
         # find max region
         max_label = find_max_region(fill_map, merge_labels)
 
-        # merge all rest regions to max region
-        for r in merge_labels:
-            if r == max_label: continue
-            mask = fill_map == r
-            fill_map[mask] = max_label
-        
-        # update region color
-        palette[max_label] = color
+        if max_label != -1:
+            # merge all rest regions to max region
+            for r in merge_labels:
+                if r == max_label: continue
+                mask = fill_map == r
+                fill_map[mask] = max_label
+            
+            # update region color
+            palette[max_label] = color
 
     # visualize fill_map
     fill, _ = show_fillmap_auto(fill_map, palette)
@@ -459,7 +489,7 @@ def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
     
     
 
-    fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
+    fill_map, _ = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
 
     # update neural line
     neural_line = fillmap_masked_line(fill_map, line_artist)
@@ -487,7 +517,7 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
     #             }
 
     # find out the region that don't needs to be extract
-    neural_to_artist = {} # map from fill_map to fill_map_artist
+    neural_to_artist = {} # map from fill_map to fill_map_artist, seems we don't use that mapping...
     for r in split_labels_artist: # r is the region in fine split regions selected by stroke
         rn = np.unique(fill_map[fill_map_artist == r]) # find regions that locate at the same position in neural fill map
         for s in rn: # create that mapping from neural region to artist region
@@ -496,19 +526,37 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
             else:
                 neural_to_artist[s] = [r]
     fixed_region = []
+    # I know this loop is confusing, infact it didn't use the mapping in neural_to_artist at all
+    # But I guess we might need to use this in the future, so I will keep this snippet above and below and make a note here
     for s in neural_to_artist.values():
         if len(s) > 1:
             fixed_region.append(find_max_region(fill_map_artist, s))
 
     # split rest regions
     next_label = np.max(fill_map) + 1
+    new_labels = [] # the new splited region means it will definitely be selected
     for r in split_labels_artist:
         if r in fixed_region: continue
         mask = fill_map_artist == r
+        # if the mask selected more than one region, then we should refine this mask first
+        # the split mask should always only select single region in fill map
+        selected_regions = np.unique(fill_map[mask])
+        if len(selected_regions) > 1:
+            for sr in selected_regions:
+                # if the selected region completly inside the mask, then we should exclude it
+                if (np.logical_and((fill_map == sr), mask) == (fill_map == sr)).all():
+                    mask[fill_map == sr] = False
+        else:
+            # if this region has been splitted, we also need to skip it
+            assert len(selected_regions) == 1
+            if (mask == fill_map[selected_regions[0]]).all():
+                continue
+        assert len(np.unique(fill_map[mask])) == 1
         fill_map[mask] = next_label
+        new_labels.append(next_label)
         next_label += 1
 
-    return fill_map
+    return fill_map, new_labels
 
 def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     '''
@@ -587,7 +635,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     
     # update palette if necssary
     if fill_map.max() >= len(palette):
-        palette = init_palette(fill_map.max(), palette)
+        palette = init_palette(fill_map.max()+1, palette)
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
@@ -742,10 +790,16 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
     stroke[stroke_map >= 250] = 1
 
     # get the labels selected by stroke map
+    # definitely, this rule need to be imporved
     labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
     if precise == False:
-        labels_count = labels_count / labels_count.max()
-        labels = labels[labels_count > 0.3]
+        labels_ratio = labels_count / labels_count.max()
+        criteria1 = labels_ratio > 0.1
+        criteria2 = labels_count > 256
+        if (stroke == 0).sum() > 64**2:
+            labels = labels[np.logical_or(criteria1, criteria2)]
+        else:
+            labels = labels[np.logical_and(criteria1, criteria2)]
     # labels = labels[labels != 0]
 
     return labels
