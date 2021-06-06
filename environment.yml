@@ -1,0 +1,16 @@
+name: flatting
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - numpy
+  - tqdm
+  - pillow
+  - py-opencv
+  - aiohttp
+  - scikit-image
+  - pytorch
+  - pip
+  - pip:
+    - briefcase
+prefix: /Users/anonymous/opt/miniconda3/envs/flatting
