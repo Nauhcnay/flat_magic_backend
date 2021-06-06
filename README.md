@@ -29,6 +29,16 @@ To update an already created environment if the `environment.yml` file changes o
 ### 2. Download pertrained models
 Download the [pertrained network model](https://drive.google.com/file/d/15l3wPO4WbMk0DmqR7reSU1mHzOaaBCfQ/view?usp=sharing) and unzip `checkpoints.zip` into `./src/flatting/resources/`.
 
+### 3. Run
+
+    cd src
+    python -m flatting
+
+### 4. Package
+
+Use `briefcase` [commands](https://docs.beeware.org/en/latest/tutorial/tutorial-1.html) for packaging.
+
+
 ## Color filling APIs (continues updating)
 ### 1. Refresh nerual models
 Send a empty post request to `ServAdd/refreshnet`. It will reload all neural network models and return True (in json) if success, False if failed.
