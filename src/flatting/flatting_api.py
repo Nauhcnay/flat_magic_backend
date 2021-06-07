@@ -6,11 +6,16 @@ from multiprocessing import Process, Queue
 
 from os.path import *
 sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
+sys.path.append(dirname(abspath(__file__)))
 from run import region_get_map, merge_to_ref, verify_region
-from .predict import predict_img
 from thinning import thinning
-from .unet import UNet
 from PIL import Image
+try:
+    from .predict import predict_img
+    from .unet import UNet
+except:
+    from predict import predict_img
+    from unet import UNet
 
 # global variables shared by all api functions
 nets = {}
@@ -51,13 +56,13 @@ def initial_nets(force_refresh=False):
         Load trained U-Net models to nets
     '''
     global nets
-
+    # print(os.listdir("./"))
     try:
         if len(nets) == 0 or force_refresh:
-            path_1024 = "./checkpoints/rand_1024/"
-            path_1024_base = "./checkpoints/base_1024/"
-            path_512_base = "./checkpoints/base_512/"
-            path_512 = "./checkpoints/rc_512/"
+            path_1024 = "./src/flatting/checkpoints/rand_1024/"
+            path_1024_base = "./src/flatting/checkpoints/base_1024/"
+            path_512_base = "./src/flatting/checkpoints/base_512/"
+            path_512 = "./src/flatting/checkpoints/rc_512/"
             nets["1024"] = initial_models(path_1024)
             nets["1024_base"] = initial_models(path_1024_base)
 
@@ -334,7 +339,7 @@ def to_fillmap(image):
 
     return fill_map, np.array(palette)
 
-def select_labels(fill_map, stroke_mask):
+def select_labels(fill_map, stroke_mask, for_split=False):
     split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     
     
@@ -342,27 +347,37 @@ def select_labels(fill_map, stroke_mask):
     DEBUG = True
     if DEBUG:
         print("Log\tgot stroke size as %s"%str(split_labels_count))
-    criteria1 = split_labels_count > split_labels_count.sum() * 0.1
+    # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
+    criteria1 = split_labels_count > split_labels_count.sum() * 0.25
 
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
     criteria2 = split_labels_count / split_labels_count.max()
     if DEBUG:
         print("Log\tgot stroke region ratio size as %s"%str(criteria2))
-    criteria2 = criteria2 > 0.15
+    # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
+    criteria2 = criteria2 > 0.25
 
-    # criteria 3: if the region has been covered by more than 1/3, always split it
-    criteria3 = []
+    # criteria 3: still, we need a overall threshold to tell should we split it or not, if the stroke is really large,
+    # then the user might want to colorize the whole region.
+    # this criteria is FOR SPLIT ONLY!
+    criteria3 = split_labels_count < (64 ** 2)
+
+    # criteria 4: if the region has been covered by more than 1/3, always split it
+    criteria4 = []
     for i, sl in enumerate(split_labels):
-        criteria3.append(split_labels_count[i] / (fill_map==sl).sum())
-    criteria3 = np.array(criteria3)
+        criteria4.append(split_labels_count[i] / (fill_map==sl).sum())
+    criteria4 = np.array(criteria4)
     
     if DEBUG:
-        print("Log:\tgot stroke/region as: %s"%str(criteria3))
-    criteria3 = criteria3 > 0.3
+        print("Log:\tgot stroke/region as: %s"%str(criteria4))
+    criteria4 = criteria4 > 0.3
 
     # select region that really need to be splited
-    split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria3)]
+    if for_split:
+        split_labels = split_labels[np.logical_or(np.logical_and(np.logical_and(criteria1, criteria2), criteria3), criteria4)]
+    else:    
+        split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria4)]
     return split_labels
 
 def merge(fill_neural, fill_artist, merge_map, line_artist):
@@ -402,7 +417,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                 
                 
 
-                split_labels_artist = select_labels(fill_map_artist, stroke_mask)
+                split_labels_artist = select_labels(fill_map_artist, stroke_mask, for_split=True)
 
                 if len(split_labels_artist) > 0:
                     fill_map, new_label = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
@@ -548,12 +563,12 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
                 # if the selected region completly inside the mask, then we should exclude it
                 if (np.logical_and((fill_map == sr), mask) == (fill_map == sr)).all():
                     mask[fill_map == sr] = False
-        else:
+        elif len(selected_regions) == 1:
             # if this region has been splitted, we also need to skip it
-            assert len(selected_regions) == 1
             if (mask == fill_map[selected_regions[0]]).all():
                 continue
-        assert len(np.unique(fill_map[mask])) == 1
+        else: 
+            continue
         fill_map[mask] = next_label
         new_labels.append(next_label)
         next_label += 1
@@ -794,10 +809,11 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
     
     labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
     if precise == False:
-        _, smap = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
+        _, smap = cv2.connectedComponents((255 - stroke*255).astype(np.uint8), connectivity=8)
         stroke_label = np.unique(smap)
         labels_new = []
         for l in stroke_label:
+            if l == 0: continue
             mask = smap == l
             labels_new.append(select_labels(fill_map, mask))
         labels = np.unique(np.concatenate(labels_new))

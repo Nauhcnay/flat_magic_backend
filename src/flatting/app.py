@@ -3,7 +3,10 @@ from PIL import Image
 from io import BytesIO
 
 import numpy as np
-from . import flatting_api
+try: 
+    from . import flatting_api
+except:
+    import flatting_api
 import base64
 import io
 import json
