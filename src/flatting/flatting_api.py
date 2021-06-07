@@ -71,7 +71,20 @@ def initial_nets(force_refresh=False):
 
         return True
     except:
-        return False
+        try:
+            path_1024 = "./checkpoints/rand_1024/"
+            path_1024_base = "./checkpoints/base_1024/"
+            path_512_base = "./checkpoints/base_512/"
+            path_512 = "./checkpoints/rc_512/"
+            nets["1024"] = initial_models(path_1024)
+            nets["1024_base"] = initial_models(path_1024_base)
+
+            nets["512"] = initial_models(path_512)
+            nets["512_base"] = initial_models(path_512_base)
+
+            return True
+        except:
+            return False
 
 def add_white(img, return_numpy = False, grayscale=True):
     img = np.array(img)
