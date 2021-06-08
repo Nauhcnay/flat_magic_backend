@@ -59,7 +59,7 @@ def initial_nets(force_refresh=False):
     # print(os.listdir("./"))
     try:
         if len(nets) == 0 or force_refresh:
-            path_1024 = "./src/flatting/checkpoints/rand_1024/"
+            path_1024 = "./src/flatting/checkpoints/rc_1024/"
             path_1024_base = "./src/flatting/checkpoints/base_1024/"
             path_512_base = "./src/flatting/checkpoints/base_512/"
             path_512 = "./src/flatting/checkpoints/rc_512/"
@@ -72,7 +72,7 @@ def initial_nets(force_refresh=False):
         return True
     except:
         try:
-            path_1024 = "./checkpoints/rand_1024/"
+            path_1024 = "./checkpoints/rc_1024/"
             path_1024_base = "./checkpoints/base_1024/"
             path_512_base = "./checkpoints/base_512/"
             path_512 = "./checkpoints/rc_512/"
