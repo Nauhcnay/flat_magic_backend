@@ -59,28 +59,25 @@ def initial_nets(force_refresh=False):
     # print(os.listdir("./"))
     try:
         if len(nets) == 0 or force_refresh:
-            path_1024 = "./src/flatting/checkpoints/rand_1024/"
-            path_1024_base = "./src/flatting/checkpoints/base_1024/"
-            path_512_base = "./src/flatting/checkpoints/base_512/"
-            path_512 = "./src/flatting/checkpoints/rc_512/"
-            nets["1024"] = initial_models(path_1024)
-            nets["1024_base"] = initial_models(path_1024_base)
-
+            # we currently load the baseline mode for test
+            # will update new model later
+            # path_1024 = "./src/flatting/checkpoints/rc_1024/"
+            # path_1024_base = "./src/flatting/checkpoints/base_1024/"
+            # path_512_base = "./src/flatting/checkpoints/base_512/"
+            # path_512 = "./src/flatting/checkpoints/rc_512/"
+            # nets["1024"] = initial_models(path_1024)
+            # nets["1024_base"] = initial_models(path_1024_base)
+            # nets["512"] = initial_models(path_512)
+            # nets["512_base"] = initial_models(path_512_base)
+            
+            path_512 = "./src/flatting/checkpoints/base_512/"
             nets["512"] = initial_models(path_512)
-            nets["512_base"] = initial_models(path_512_base)
 
         return True
     except:
         try:
-            path_1024 = "./checkpoints/rand_1024/"
-            path_1024_base = "./checkpoints/base_1024/"
-            path_512_base = "./checkpoints/base_512/"
-            path_512 = "./checkpoints/rc_512/"
-            nets["1024"] = initial_models(path_1024)
-            nets["1024_base"] = initial_models(path_1024_base)
-
+            path_512 = "./checkpoints/base_512/"
             nets["512"] = initial_models(path_512)
-            nets["512_base"] = initial_models(path_512_base)
 
             return True
         except:
