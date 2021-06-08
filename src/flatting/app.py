@@ -16,7 +16,8 @@ import multiprocessing
 routes = web.RouteTableDef()
 
 # initial models
-assert flatting_api.initial_nets()
+loaded_initial_nets = flatting_api.initial_nets()
+assert loaded_initial_nets
 
 @routes.get('/')
 # seems the function name is not that important?

@@ -15,8 +15,13 @@ import numpy as np
 from os.path import *
 
 # use cython adjacency matrix
-import pyximport; pyximport.install()
-import adjacency_matrix
+try:
+    import adjacency_matrix
+## If it's not already compiled, compile it.
+except:
+    import pyximport
+    pyximport.install()
+    import adjacency_matrix
 
 def extract_skeleton(img):
 

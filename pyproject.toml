@@ -12,8 +12,16 @@ formal_name = "Flatting"
 description = "Back-end for Photoshop flatting plugin"
 icon = "src/flatting/resources/flatting"
 sources = ['src/flatting']
-requires = []
-
+requires = [
+    "numpy",
+    "tqdm",
+    "pillow",
+    "opencv-python-headless",
+    "aiohttp",
+    "scikit-image",
+    "torch",
+    "torchvision"
+    ]
 
 [tool.briefcase.app.flatting.macOS]
 requires = []
