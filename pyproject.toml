@@ -20,7 +20,7 @@ requires = [
     "aiohttp",
     "scikit-image",
     "torch",
-    "torchvision",
+    "torchvision"
     ]
 
 [tool.briefcase.app.flatting.macOS]

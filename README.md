@@ -51,7 +51,7 @@ To create an installer:
 
 To update the standalone program when your code or dependencies change:
 
-    briefcase update
+    briefcase update -r -d
 
 You can also simply run `briefcase run -u`.
 
@@ -60,6 +60,10 @@ To debug this process, you can run your code from the entrypoint briefcase uses:
     briefcase dev
 
 This reveals some issues important to debug. It doesn't reveal dependency issues, because it's not using briefcase's python installation.
+
+On my setup, I have to manually edit `edit macOS/app/Flatting/Flatting.app/Contents/Resources/app_packages/torch/distributed/rpc/api.py` to insert a line `if docstring is None: continue` after line 443:
+
+    assert docstring is not None, "RRef user-facing methods should all have docstrings."
 
 ### 5. Install Photoshop plugin
 Download the [flatting plugin](https://drive.google.com/file/d/1LVxNAO1H_F1rhHQOSeDjX3WBC894qVFB/view?usp=sharing) and unzip it to any place. This zip file contains 4 files:
