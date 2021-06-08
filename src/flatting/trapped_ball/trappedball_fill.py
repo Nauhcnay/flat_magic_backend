@@ -3,8 +3,14 @@ import numpy as np
 import pdb
 import pickle
 import time
-import pyximport; pyximport.install()
-import adjacency_matrix
+# use cython adjacency matrix
+try:
+    import adjacency_matrix
+## If it's not already compiled, compile it.
+except:
+    import pyximport
+    pyximport.install()
+    import adjacency_matrix
 # it seemed that multi thread will not help to reduce running time
 # https://medium.com/python-experiments/parallelising-in-python-mutithreading-and-mutiprocessing-with-practical-templates-c81d593c1c49
 from multiprocessing import Pool
