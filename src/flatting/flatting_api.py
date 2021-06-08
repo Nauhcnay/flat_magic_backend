@@ -4,6 +4,7 @@ import cv2
 import torch
 from multiprocessing import Process, Queue
 
+from pathlib import Path
 from os.path import *
 sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 sys.path.append(dirname(abspath(__file__)))
@@ -22,6 +23,7 @@ nets = {}
 queue = Queue
 
 def initial_models(path_to_ckpt):
+    path_to_ckpt = str(path_to_ckpt)
 
     # find the lastest model
     ckpt_list = []
@@ -57,6 +59,7 @@ def initial_nets(force_refresh=False):
     '''
     global nets
     # print(os.listdir("./"))
+    checkpoints = Path(__file__).parent/'resources'/'checkpoints'
     try:
         if len(nets) == 0 or force_refresh:
             # we currently load the baseline mode for test
@@ -70,18 +73,12 @@ def initial_nets(force_refresh=False):
             # nets["512"] = initial_models(path_512)
             # nets["512_base"] = initial_models(path_512_base)
             
-            path_512 = "./src/flatting/checkpoints/base_512/"
+            path_512 = checkpoints/"base_512/"
             nets["512"] = initial_models(path_512)
 
         return True
     except:
-        try:
-            path_512 = "./checkpoints/base_512/"
-            nets["512"] = initial_models(path_512)
-
-            return True
-        except:
-            return False
+        return False
 
 def add_white(img, return_numpy = False, grayscale=True):
     img = np.array(img)
@@ -192,7 +189,8 @@ def run_single(line_artist, net, radius, resize, preview=False):
             it usually contain much more splited regions than fill_map
         fill_artist, the colored fill_map_artist
     '''
-    assert initial_nets()
+    loaded_initial_nets = initial_nets()
+    assert loaded_initial_nets
     global nets
 
     line_input = add_white(line_artist)
