@@ -39,9 +39,10 @@ Download the [pertrained network model](https://drive.google.com/file/d/15l3wPO4
 Use `briefcase` [commands](https://docs.beeware.org/en/latest/tutorial/tutorial-1.html) for packaging.
 
 ### 5. Install Photoshop plugin
-Download the [flatting plugin](https://drive.google.com/file/d/1LVxNAO1H_F1rhHQOSeDjX3WBC894qVFB/view?usp=sharing) and unzip it to any place. This zip file contains 2 files:
+Download the [flatting plugin](https://drive.google.com/file/d/1LVxNAO1H_F1rhHQOSeDjX3WBC894qVFB/view?usp=sharing) and unzip it to any place. This zip file contains 4 files:
 1. 9e42a570_PS.ccx, open it to install
 2. Flatting actions_mac.atn / Flatting actions_win.atn, open it in photoshop, as "Actions->load actions". Please choose the right file which matches your OS. (Currently Flatting actions_win.atn is not available)
+3. 01.png and 02.png, the test image for the flatting plugin, our flatting tool works well on them ;P
 
 
 ## Color filling APIs (continues updating)
