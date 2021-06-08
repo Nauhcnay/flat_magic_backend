@@ -59,7 +59,7 @@ def initial_nets(force_refresh=False):
     '''
     global nets
     # print(os.listdir("./"))
-    checkpoints = Path(__file__).parent/'resources'/'checkpoints'
+    checkpoints = Path(__file__).parent/'checkpoints'
     try:
         if len(nets) == 0 or force_refresh:
 
