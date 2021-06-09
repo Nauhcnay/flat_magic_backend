@@ -66,9 +66,9 @@ On my setup, I have to manually edit `edit macOS/app/Flatting/Flatting.app/Conte
     assert docstring is not None, "RRef user-facing methods should all have docstrings."
 
 ### 5. Install Photoshop plugin
-Download the [flatting plugin](https://drive.google.com/file/d/1LVxNAO1H_F1rhHQOSeDjX3WBC894qVFB/view?usp=sharing) and unzip it to any place. This zip file contains 4 files:
+Download the [flatting plugin](https://drive.google.com/file/d/1HivdqU2Z2dIL2MvqzEYmCLO2_nDL2Cnk/view?usp=sharing) and unzip it to any place. This zip file contains 4 files:
 1. 9e42a570_PS.ccx, open it to install
-2. Flatting actions_mac.atn / Flatting actions_win.atn, open it in photoshop, as "Actions->load actions". Please choose the right file which matches your OS. (Currently Flatting actions_win.atn is not available)
+2. Flatting actions_mac.atn / Flatting actions_win.atn, open it in photoshop, as "Actions->load actions". Please choose the right file which matches your OS. 
 3. 01.png and 02.png, the test image for the flatting plugin, our flatting tool works well on them ;P
 
 

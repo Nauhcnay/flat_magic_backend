@@ -59,12 +59,14 @@ def initial_nets(force_refresh=False):
     '''
     global nets
     # print(os.listdir("./"))
-    checkpoints = Path(__file__).parent/'resources'/'checkpoints'
+    checkpoints = Path(__file__).parent/'checkpoints'
     try:
         if len(nets) == 0 or force_refresh:
+
+
             # we currently load the baseline mode for test
             # will update new model later
-            # path_1024 = "./src/flatting/checkpoints/rc_1024/"
+            # path_1024 = "./src/flatting/checkpoints/rand_1024/"
             # path_1024_base = "./src/flatting/checkpoints/base_1024/"
             # path_512_base = "./src/flatting/checkpoints/base_512/"
             # path_512 = "./src/flatting/checkpoints/rc_512/"
@@ -353,16 +355,21 @@ def select_labels(fill_map, stroke_mask, for_split=False):
     
     # criteria 1: the absolute size of merge stroke in each region should large enough. 
     DEBUG = True
-    if DEBUG:
-        print("Log\tgot stroke size as %s"%str(split_labels_count))
+    if DEBUG and for_split:
+        print("Log:\tselect labels for spliting")
+    elif DEBUG and for_split == False:
+        print("Log:\tselect labels for merging")
+    
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
     criteria1 = split_labels_count > split_labels_count.sum() * 0.25
+    if DEBUG:
+        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.25))
 
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
     criteria2 = split_labels_count / split_labels_count.max()
     if DEBUG:
-        print("Log\tgot stroke region ratio size as %s"%str(criteria2))
+        print("Log\tgot stroke region ratio size as %s, it should greater than %f"%(str(criteria2), 0.25))
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
     criteria2 = criteria2 > 0.25
 
@@ -370,6 +377,8 @@ def select_labels(fill_map, stroke_mask, for_split=False):
     # then the user might want to colorize the whole region.
     # this criteria is FOR SPLIT ONLY!
     criteria3 = split_labels_count < (64 ** 2)
+    if DEBUG:
+        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 64 ** 2))
 
     # criteria 4: if the region has been covered by more than 1/3, always split it
     criteria4 = []
@@ -378,7 +387,7 @@ def select_labels(fill_map, stroke_mask, for_split=False):
     criteria4 = np.array(criteria4)
     
     if DEBUG:
-        print("Log:\tgot stroke/region as: %s"%str(criteria4))
+        print("Log:\tgot stroke/region as: %s, it should greater than 0.3"%str(criteria4))
     criteria4 = criteria4 > 0.3
 
     # select region that really need to be splited
@@ -386,6 +395,8 @@ def select_labels(fill_map, stroke_mask, for_split=False):
         split_labels = split_labels[np.logical_or(np.logical_and(np.logical_and(criteria1, criteria2), criteria3), criteria4)]
     else:    
         split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria4)]
+    if DEBUG:
+        print("Log:\tselected regions %s"%str(split_labels))
     return split_labels
 
 def merge(fill_neural, fill_artist, merge_map, line_artist):
@@ -426,7 +437,6 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                 
 
                 split_labels_artist = select_labels(fill_map_artist, stroke_mask, for_split=True)
-
                 if len(split_labels_artist) > 0:
                     fill_map, new_label = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
                     new_labels += new_label
@@ -551,11 +561,15 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
             else:
                 neural_to_artist[s] = [r]
     fixed_region = []
-    # I know this loop is confusing, infact it didn't use the mapping in neural_to_artist at all
-    # But I guess we might need to use this in the future, so I will keep this snippet above and below and make a note here
-    for s in neural_to_artist.values():
-        if len(s) > 1:
-            fixed_region.append(find_max_region(fill_map_artist, s))
+    # only if the regions in fill_map_artist covers the same region as the region in fill_map, 
+    # we need to keep the largest regions label unchanged. otherwise
+    # this will cause color blasting because we didn't split region that should be splited out
+    for s in neural_to_artist:
+        fill_map_a = fill_map_artist.copy()
+        combined_region = neural_to_artist[s][0]
+        for k in neural_to_artist[s]: fill_map_a[fill_map_a==k] = combined_region
+        if len(neural_to_artist[s]) > 1 and ((fill_map==s) == (fill_map_a==combined_region)).all():
+            fixed_region.append(find_max_region(fill_map_artist, neural_to_artist[s]))
 
     # split rest regions
     next_label = np.max(fill_map) + 1
