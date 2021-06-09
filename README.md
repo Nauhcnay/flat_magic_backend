@@ -34,7 +34,7 @@ Download the [pretrained network model](https://drive.google.com/file/d/15l3wPO4
 
 ### 4. Package
 
-Use `briefcase` [commands](https://docs.beeware.org/en/latest/tutorial/tutorial-1.html) for packaging. Briefcase can't compile Cython modules, so you must first do that. There is only one. Compile it via `cythonize src/flatting/trapped_ball/adjacency_matrix.pyx`.
+Use `briefcase` [commands](https://docs.beeware.org/en/latest/tutorial/tutorial-1.html) for packaging. Briefcase can't compile Cython modules, so you must first do that. There is only one. Compile it via `cythonize -i src/flatting/trapped_ball/adjacency_matrix.pyx`.
 
 To start the process, run:
 
