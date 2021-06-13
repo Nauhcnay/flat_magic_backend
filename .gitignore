@@ -1,6 +1,6 @@
 # Specific to this project
 /data
-/src/flatting/resources/checkpoints
+/src/flatting/checkpoints
 /src/flatting.dist-info
 
 # Byte-compiled / optimized / DLL files
