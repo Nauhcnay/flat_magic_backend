@@ -115,7 +115,7 @@ def add_alpha(img, line_color = None, opacity = 1):
     img_alpha[:,:,:3] = img.copy()
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
     img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
 
     if isinstance(line_color, str):
@@ -196,7 +196,6 @@ def run_single(line_artist, net, radius, resize, preview=False):
     global nets
 
     line_input = add_white(line_artist)
-
     # resize the image if the frontend ask to do so
     if resize:
         # compute the new size of input image
@@ -330,6 +329,7 @@ def to_fillmap(image):
     Given:
         image, the numpy array of input image
     '''
+    # we need to consider the alpha channel
     h, w, c = image.shape
     assert c == 3 or c == 4
     # get labels of the color filled result
@@ -361,9 +361,9 @@ def select_labels(fill_map, stroke_mask, for_split=False):
         print("Log:\tselect labels for merging")
     
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
-    criteria1 = split_labels_count > split_labels_count.sum() * 0.25
+    criteria1 = split_labels_count > split_labels_count.sum() * 0.15
     if DEBUG:
-        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.25))
+        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.15))
 
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
@@ -376,9 +376,9 @@ def select_labels(fill_map, stroke_mask, for_split=False):
     # criteria 3: still, we need a overall threshold to tell should we split it or not, if the stroke is really large,
     # then the user might want to colorize the whole region.
     # this criteria is FOR SPLIT ONLY!
-    criteria3 = split_labels_count < (64 ** 2)
+    criteria3 = split_labels_count < (45 ** 2)
     if DEBUG:
-        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 64 ** 2))
+        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 45 ** 2))
 
     # criteria 4: if the region has been covered by more than 1/3, always split it
     criteria4 = []
