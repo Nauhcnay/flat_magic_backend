@@ -2,7 +2,6 @@ import os, sys
 import numpy as np
 import cv2
 import torch
-from multiprocessing import Process, Queue
 
 from pathlib import Path
 from os.path import *
@@ -20,7 +19,6 @@ except:
 
 # global variables shared by all api functions
 nets = {}
-queue = Queue
 
 def initial_models(path_to_ckpt):
     path_to_ckpt = str(path_to_ckpt)

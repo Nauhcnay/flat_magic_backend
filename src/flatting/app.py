@@ -3,10 +3,14 @@ from PIL import Image
 from io import BytesIO
 
 import numpy as np
-try: 
+try:
     from . import flatting_api
 except:
     import flatting_api
+try:
+    from . import flatting_api_async
+except:
+    import flatting_api_async
 import base64
 import io
 import json
@@ -15,9 +19,10 @@ import multiprocessing
 
 routes = web.RouteTableDef()
 
-# initial models
-loaded_initial_nets = flatting_api.initial_nets()
-assert loaded_initial_nets
+# initialize models
+# UPDATE: Don't initialize models here, let our multiprocessing processes do it.
+# loaded_initial_nets = flatting_api.initial_nets()
+# assert loaded_initial_nets
 
 @routes.get('/')
 # seems the function name is not that important?
@@ -26,6 +31,8 @@ async def hello(request):
 
 @routes.post('/flatmultiple')
 async def flatmultiple( request ):
+    print( "WARNING: flatmultiple() called. Does not use the flatting_api_async." )
+    
     # read input
     # how to test my API if I want to send a post request?
     # I guess data is python object already
@@ -85,7 +92,7 @@ async def flatsingle( request ):
     preview = data['preview']
     resize = data['resize']
 
-    flatted = flatting_api.run_single(img, net, radii, resize, preview)
+    flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
@@ -99,6 +106,8 @@ async def flatsingle( request ):
                 
 @routes.post('/refreshnet')
 async def refreshnet( request ):
+    raise RuntimeError("Won't work with flatting_api_async")
+    
     return web.json_response(flatting_api.initial_nets(True))
 
 @routes.post('/merge')
@@ -115,7 +124,7 @@ async def merge( request ):
     stroke = to_pil(data['stroke'])
     # palette = np.array(data['palette'])
     
-    merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
+    merged = await flatting_api_async.merge(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['image'] = to_base64(merged['fill_color'])
@@ -125,6 +134,8 @@ async def merge( request ):
 
 @routes.post('/splitauto')
 async def split_auto( request ):
+    print( "WARNING: split_auto() called. Does not use the flatting_api_async." )
+    
     data = await request.json()
     try:
         data = json.loads(data)
@@ -158,7 +169,7 @@ async def split_manual( request ):
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
     
-    splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
+    splited = await flatting_api.split_manual_async(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])

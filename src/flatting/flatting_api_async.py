@@ -8,9 +8,12 @@ import flatting_api
 ## Keep in mind that parallel processes will load duplicate networks
 ## and compete for the same RAM, which could lead to thrashing.
 ## Pass `max_workers = N` for exactly `N` parallel processes.
-executor = ProcessPoolExecutor()
+# import multiprocessing
+# HALF_CORES = max( multiprocessing.cpu_count()//2, 1 ) )
+executor_batch = ProcessPoolExecutor()
+executor_interactive = ProcessPoolExecutor()
 
-async def run_async( f ):
+async def run_async( executor, f ):
     ## We expect this to be called from inside an existing loop.
     ## As a result, we call `get_running_loop()` instead of `get_event_loop()` so that
     ## it raises an error if our assumption is false, rather than creating a new loop.
@@ -19,10 +22,10 @@ async def run_async( f ):
     return data
 
 async def run_single( *args, **kwargs ):
-    return await run_async( functools.partial( flatting_api.run_single, *args, **kwargs ) )
+    return await run_async( executor_batch, functools.partial( flatting_api.run_single, *args, **kwargs ) )
 
 async def merge( *args, **kwargs ):
-    return await run_async( functools.partial( flatting_api.merge, *args, **kwargs ) )
+    return await run_async( executor_interactive, functools.partial( flatting_api.merge, *args, **kwargs ) )
 
 async def split_manual( *args, **kwargs ):
-    return await run_async( functools.partial( flatting_api.split_manual, *args, **kwargs ) )
+    return await run_async( executor_interactive, functools.partial( flatting_api.split_manual, *args, **kwargs ) )
