@@ -65,6 +65,14 @@ On my setup, I have to manually edit `edit macOS/app/Flatting/Flatting.app/Conte
 
     assert docstring is not None, "RRef user-facing methods should all have docstrings."
 
+### 4b. Packaging (without briefcase)
+
+If briefcase doesn't work, you can use [pyinstaller](https://www.pyinstaller.org/):
+
+    pyinstaller src/flatting_server.py
+
+PyInstaller is not listed as a conda dependency, because it's optional. Manually install it via: `conda install -c conda-forge pyinstaller`.
+
 ### 5. Install Photoshop plugin
 Download the [flatting plugin](https://drive.google.com/file/d/1HivdqU2Z2dIL2MvqzEYmCLO2_nDL2Cnk/view?usp=sharing) and unzip it to any place. This zip file contains 4 files:
 1. 9e42a570_PS.ccx, open it to install
