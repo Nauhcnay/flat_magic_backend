@@ -92,7 +92,8 @@ async def flatsingle( request ):
     preview = data['preview']
     resize = data['resize']
 
-    flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
+    # flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
+    flatted = flatting_api.run_single(img, net, radii, resize, preview)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
@@ -117,14 +118,15 @@ async def merge( request ):
         data = json.loads(data)
     except:
         print("got dict directly")
-    
+
     line_artist = to_pil(data['line_artist'])
     fill_neural = np.array(to_pil(data['fill_neural']))
     fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = to_pil(data['stroke'])
     # palette = np.array(data['palette'])
     
-    merged = await flatting_api_async.merge(fill_neural, fill_artist, stroke, line_artist)
+    # merged = await flatting_api_async.merge(fill_neural, fill_artist, stroke, line_artist)
+    merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['image'] = to_base64(merged['fill_color'])
@@ -169,12 +171,14 @@ async def split_manual( request ):
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
     
-    splited = await flatting_api.split_manual_async(fill_neural, fill_artist, stroke, line_artist)
+    # splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist)
+    splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
     result['line_simplified'] = to_base64(splited['line_neural'])
     result['image'] = to_base64(splited['fill_color'])
+    result['fill_artist'] = to_base64(splited['fill_artist'])
 
     return web.json_response(result)    
 

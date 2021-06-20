@@ -74,7 +74,10 @@ def initial_nets(force_refresh=False):
             # nets["512_base"] = initial_models(path_512_base)
             
             path_512 = checkpoints/"base_512/"
-            nets["512"] = initial_models(path_512)
+            if "512" not in nets:
+                nets["512"] = initial_models(path_512)
+            else:
+                print("Log:\tFound model exsits, skip initialization")
 
         return True
     except:
@@ -113,7 +116,7 @@ def add_alpha(img, line_color = None, opacity = 1):
     img_alpha[:,:,:3] = img.copy()
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
     img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
 
     if isinstance(line_color, str):
@@ -194,7 +197,6 @@ def run_single(line_artist, net, radius, resize, preview=False):
     global nets
 
     line_input = add_white(line_artist)
-
     # resize the image if the frontend ask to do so
     if resize:
         # compute the new size of input image
@@ -216,7 +218,9 @@ def run_single(line_artist, net, radius, resize, preview=False):
     line_simplify, bbox = predict_img(net=nets[net][0],
                            full_img=line_input,
                            device=nets[net][1],
-                           size = int(size))    
+                           size = int(size))  
+    del nets[net]
+    torch.cuda.empty_cache()
     
     line_simplify = add_cropped_back(line_simplify, bbox, line_input.size)        
 
@@ -328,44 +332,100 @@ def to_fillmap(image):
     Given:
         image, the numpy array of input image
     '''
+    # we need to consider the alpha channel
     h, w, c = image.shape
     assert c == 3 or c == 4
     # get labels of the color filled result
-    color_map = (1e6*image[:,:,0] + 1e3*image[:,:,1] + image[:,:,2]).astype(np.int64)
-    colors = np.unique(color_map)
-    color_to_label = {}
-    palette = []
-    for i, c in enumerate(colors):
-        color_to_label[c] = i
-        # convert c back to color
-        color = [c//(10**(3*i))%1000 for i in range(2, -1, -1)]
-        palette.append(color)
-    # map color map to fill map
-    fill_map = np.copy(color_map)
-    for k, v in color_to_label.items():
-        fill_map[color_map == k] = v
+    if c == 3:
+        color_map = (1e6*image[:,:,0] + 1e3*image[:,:,1] + image[:,:,2]).astype(np.int64)
+        colors = np.unique(color_map)
+        color_to_label = {}
+        palette = []
+        for i, cl in enumerate(colors):
+            # convert cl back to color
+            color = [cl//(10**(3*i))%1000 for i in range(2, -1, -1)]
+            palette.append(color)
+            color_to_label[cl] = i
+
+        # map color map to fill map
+        fill_map = np.copy(color_map)
+        for k, v in color_to_label.items():
+            fill_map[color_map == k] = v
+    else:
+        color_map = (1e9*image[:,:,0] + 1e6*image[:,:,1] + 1e3*image[:,:,2] + image[:,:,3]).astype(np.int64)
+        colors = np.unique(color_map)
+        color_to_label = {}
+        palette = []
+        i = 0 # we need to control the counter i manually
+        for cl in colors:
+            color = [cl//(10**(3*i))%1000 for i in range(3, -1, -1)]
+            if color[3] == 0:
+                # discard this region, we use -1 to indicate all regions that is transparent
+                color_to_label[cl] = -1
+            else:
+                color_to_label[cl] = i
+                i += 1
+                palette.append(color[0:3])
+        # map color map to fill map
+        fill_map = np.copy(color_map)
+        for k, v in color_to_label.items():
+            fill_map[color_map == k] = v
 
     return fill_map, np.array(palette)
 
-def select_labels(fill_map, stroke_mask, for_split=False):
+def is_grayscale(color):
+    color = color.squeeze()
+    assert len(color) == 3
+    r = color[0]
+    g = color[1]
+    b = color[2]
+    return r==g and g==b
+
+def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=False):
+    # construct the colorize weight, it need to consider if it is the re-colorzied case
+    # generally, we should tend to always split if the region has been assigned to a color
+    # and also put less weight to stroke that try to re-colorize
+    fill, palette = fill_palette
     split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
-    
-    
+    color_weights = []
+    for sl in split_labels:
+        sp = np.unique(fill[fill_map==sl])
+        # if the region in fill_map is covered by the concurrent region in fill
+        # find the largest region's color as the selected color
+        # generally, we need to build up a relation between fill map and fill
+        if len(sp) > 1:
+            sp_max = find_max_region(fill, sp)
+        else:   
+            assert len(sp) == 1
+            sp_max = sp
+        if is_grayscale(palette[sp_max]):
+            color_weights.append(1) # if first time colorize, give the highest weight
+        elif (palette[sp_max] == stroke_color).all():
+            # if the region has be colorized and have the same color as the current stroke
+            # igonre that region
+            color_weights.append(0) 
+        else:
+            color_weights.append(0.8)
+    assert len(color_weights) == len(split_labels)
+    color_weights = np.array(color_weights)
+
     # criteria 1: the absolute size of merge stroke in each region should large enough. 
-    DEBUG = True
+    DEBUG = False
     if DEBUG and for_split:
         print("Log:\tselect labels for spliting")
     elif DEBUG and for_split == False:
         print("Log:\tselect labels for merging")
     
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
-    criteria1 = split_labels_count > split_labels_count.sum() * 0.25
+    criteria1 = split_labels_count.copy() * color_weights
+    criteria1 = criteria1 > criteria1.sum() * 0.15
     if DEBUG:
-        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.25))
+        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.15))
 
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
-    criteria2 = split_labels_count / split_labels_count.max()
+    criteria2 = split_labels_count.copy() * color_weights
+    criteria2 = criteria2 / criteria2.max()
     if DEBUG:
         print("Log\tgot stroke region ratio size as %s, it should greater than %f"%(str(criteria2), 0.25))
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
@@ -374,16 +434,25 @@ def select_labels(fill_map, stroke_mask, for_split=False):
     # criteria 3: still, we need a overall threshold to tell should we split it or not, if the stroke is really large,
     # then the user might want to colorize the whole region.
     # this criteria is FOR SPLIT ONLY!
-    criteria3 = split_labels_count < (64 ** 2)
-    if DEBUG:
-        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 64 ** 2))
+    criteria3 = []
 
-    # criteria 4: if the region has been covered by more than 1/3, always split it
+    # criteria 4: if the region has been covered by more than 1/3, always select it
     criteria4 = []
     for i, sl in enumerate(split_labels):
+        if color_weights[i] < 1:
+            criteria3.append(True) # always split for re-colorize
+        else:
+            if split_labels_count.sum() < 45 ** 2:
+                criteria3.append(True)
+            else:
+                criteria3.append(False)               
         criteria4.append(split_labels_count[i] / (fill_map==sl).sum())
-    criteria4 = np.array(criteria4)
+    criteria3 = np.array(criteria3)
+    criteria4 = np.array(criteria4) * color_weights
     
+    if DEBUG:
+        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 45 ** 2))
+
     if DEBUG:
         print("Log:\tgot stroke/region as: %s, it should greater than 0.3"%str(criteria4))
     criteria4 = criteria4 > 0.3
@@ -395,6 +464,8 @@ def select_labels(fill_map, stroke_mask, for_split=False):
         split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria4)]
     if DEBUG:
         print("Log:\tselected regions %s"%str(split_labels))
+        import pdb
+        pdb.set_trace()
     return split_labels
 
 def merge(fill_neural, fill_artist, merge_map, line_artist):
@@ -409,21 +480,21 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
     print("Log:\tmerging")
     # get fill_map and palette
     fill_map, palette = to_fillmap(fill_neural)
+    fill_map_fix = fill_map.copy()
     fill_map_artist, _ = to_fillmap(fill_artist)
     line_artist = add_white(line_artist)
-    merge_map = add_white(merge_map, return_numpy=True, grayscale=False)
-    
+    # merge_map = add_white(merge_map, return_numpy=True, grayscale=False)
     # find how many merge strokes in merge map
     # merge_map = np.array(Image.fromarray(merge_map).convert("RGB"))
-    strokes, stroke_palette = to_fillmap(merge_map)
+    strokes, stroke_palette = to_fillmap(np.array(merge_map))
     # for each group of all strokes with the same color
     for i in range(len(stroke_palette)):
         color = stroke_palette[i]
-        if (color == [255, 255, 255]).all(): continue # skip the white back ground
+        # if (color == [255, 255, 255]).all(): continue # skip the white back ground
         stroke = (1 - (strokes == i).astype(np.int)) * 255
         # merge_labels = stroke_to_label(fill_map, stroke)
 
-        def split_in_merge(stroke, fill_map, fill_map_artist):
+        def split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist):
             new_labels = []
             # split to each single stroke in each stroke group
             _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
@@ -431,10 +502,9 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
             for l in stroke_label:
                 if l == 0: continue # skip background
                 stroke_mask = stroke_map == l
-                
-                
-
-                split_labels_artist = select_labels(fill_map_artist, stroke_mask, for_split=True)
+                # stroke_color = stroke_palette
+                split_labels_artist = select_labels(fill_map_artist, stroke_mask, color, 
+                                                (fill_map_fix, palette), for_split=True)
                 if len(split_labels_artist) > 0:
                     fill_map, new_label = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
                     new_labels += new_label
@@ -451,8 +521,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                     new_labels.remove(r)
             return fill_map, np.array(new_labels)
 
-        fill_map, new_labels = split_in_merge(stroke, fill_map, fill_map_artist)
-        
+        fill_map, new_labels = split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist)
         # split this region in fill artist into a different region
 
         # if len(merge_labels) <= 1:
@@ -464,7 +533,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
         #             "fill_color": fill}
 
         # need to update merge label again
-        merge_labels = stroke_to_label(fill_map, stroke)
+        merge_labels = stroke_to_label(fill_map, stroke, color, (fill_map_fix, palette))
         merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
         # update palette if the max label has greater than the size of the palette
         if fill_map.max() >= len(palette):
@@ -488,7 +557,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
     # layers = get_layers(fill_map, palette)
 
     # update neural line
-    line_neural = fillmap_masked_line(fill_map, line_artist)
+    line_neural = fillmap_masked_line(fill_map)
     line_neural = add_alpha(line_neural, line_color = "9ae42c", opacity = 0.7)
 
     return {"line_simplified": line_neural,
@@ -553,7 +622,7 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
     neural_to_artist = {} # map from fill_map to fill_map_artist, seems we don't use that mapping...
     for r in split_labels_artist: # r is the region in fine split regions selected by stroke
         rn = np.unique(fill_map[fill_map_artist == r]) # find regions that locate at the same position in neural fill map
-        for s in rn: # create that mapping from neural region to artist region
+        for s in rn: # create the mapping from neural region to artist region
             if s in neural_to_artist:
                 neural_to_artist[s].append(r)
             else:
@@ -581,14 +650,16 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
         if len(selected_regions) > 1:
             for sr in selected_regions:
                 # if the selected region completly inside the mask, then we should exclude it
-                if (np.logical_and((fill_map == sr), mask) == (fill_map == sr)).all():
-                    mask[fill_map == sr] = False
+                mask[fill_map == sr] = False
+            if mask.sum() < 5:
+                mask = fill_map_artist == r
         elif len(selected_regions) == 1:
             # if this region has been splitted, we also need to skip it
             if (mask == fill_map[selected_regions[0]]).all():
                 continue
         else: 
             continue
+        if mask.sum() == 0: continue
         fill_map[mask] = next_label
         new_labels.append(next_label)
         next_label += 1
@@ -620,10 +691,11 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     line_artist[split_map_manual < 240] = 0
 
     # find the region need to be split on artist fill map
-    split_labels = stroke_to_label(fill_map_artist, split_map_manual, True)
+    split_labels = stroke_to_label(fill_map_artist, split_map_manual, None, (None, None), True)
+    split_labels_neural = stroke_to_label(fill_map, split_map_manual, None, (None, None), True)
     if len(split_labels) == 0:
         print("Log:\t(probably) inaccurate input, skip split manual")
-        line_artist = add_alpha(Image.fromarry(line_artist))
+        line_artist = add_alpha(Image.fromarray(line_artist))
         neural_line = fillmap_masked_line(fill_map, line_artist)
         neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 0.7)
         fill, palette = show_fillmap_auto(fill_map, palette)
@@ -637,10 +709,8 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     for r in split_labels:
         p_list.append(np.where(fill_map_artist == r))
     merged_mask = merge_points(p_list)
-    label_old = find_region(fill_map, merged_mask)
-
-    # split  
-    masks = []
+    # find the largest seleted region in fill map
+    # label_old = find_region(fill_map, merged_mask)
     split_single_region = np.zeros(fill_map.shape, dtype=np.uint8)
     split_single_region[merged_mask] = 1
     split_single_region[line_artist < 240] = 0
@@ -649,25 +719,30 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     regions = regions[regions != 0]
     if len(regions) > 1:
         max_region = find_max_region(split_regions, regions)
-        for s in regions:
-            if s == max_region: 
-                mask_old = split_regions == s
-            else:
-                masks.append(split_regions == s)
-
-        # split regions
+        old_label = find_max_region(fill_map, split_labels_neural)
         next_label = fill_map.max() + 1
-        for mask in masks:
-            if is_split_safe(mask, split_map_manual):
+        # split regions
+        for s in regions:
+            mask = split_regions == s
+            # remove all regions in neural fill map that is contained by this mask
+            # becasue if the old region in fill map could still covered by the new 
+            # mask, that means this region is not modified at all, and we should not 
+            # change it.
+            remove_inside_regions(fill_map, mask, split_labels_neural)
+            if s == max_region:
+                fill_map[mask] = old_label
+            else:
                 fill_map[mask] = next_label
                 next_label += 1
-        fill_map[line_artist < 240] = 0
-        fill_map[mask_old] = label_old
-        fill_map[split_map_manual < 240] = label_old
-        fill_map = thinning(fill_map)
+            
+        # fill_map[line_artist < 240] = 0
 
+        # fill_map[mask_old] = label_old
+        # fill_map[split_map_manual < 240] = label_old
+        # fill_map = thinning(fill_map)
+    
     # update neural line
-    neural_line = fillmap_masked_line(fill_map, line_artist)
+    neural_line = fillmap_masked_line(fill_map)
     neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 0.7)
     
     # update palette if necssary
@@ -676,15 +751,30 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
+
+    # update the fill_artist map
+
+    _, fill_map_artist_new = cv2.connectedComponents((line_artist > 240).astype(np.uint8), connectivity=8)
+    fill_map_artist_new = thinning(fill_map_artist_new)
+    fill_artist, _ = show_fillmap_auto(fill_map_artist_new)
     # layers = get_layers(fill_map, palette)
 
     line_artist = add_alpha(Image.fromarray(line_artist))
-    
+    print("Log:\tdone")
 
     return {"line_artist": line_artist,
             "line_neural": neural_line,
             "fill_color": fill,
+            "fill_artist": fill_artist
             }
+def remove_inside_regions(fill_map, mask, region_list, remove_selected=False):
+    if remove_selected:
+        for r in region_list:
+            mask[fill_map==r] = False
+    else:
+        for r in np.unique(fill_map[mask]):
+            if r in region_list: continue
+            mask[fill_map==r] = False
 
 def show_fillmap_manual(fill_map, palette):
     '''
@@ -719,7 +809,7 @@ def show_fillmap_auto(fill_map, palette=None):
     elif palette is None and region_num >= 256:
         palette = init_palette(region_num)
 
-    if region_num > len(palette):
+    if region_num >= len(palette):
         # print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
         palette = init_palette(region_num, palette)
 
@@ -771,7 +861,28 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
     if old_palette is not None:
         p_size = len(old_palette)
         color_num = color_num if color_num > p_size else p_size+20
-        palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
+        if color_num > 255:
+            palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
+        else:
+            # we always generate grayscale color
+            # find grayscale color in the palette
+            skip_grayscale = []
+            for i in range(len(old_palette)):
+                if old_palette[i][0] == old_palette[i][1] and old_palette[i][1] == old_palette[i][2]:
+                    skip_grayscale.append(old_palette[i][0])
+
+            palette = old_palette.copy()
+            for i in range(p_size, color_num):
+                new_color = np.random.randint(0, 255, (1, 1), dtype=np.uint8)
+                # keep generate new color that is not used yet
+                while new_color not in skip_grayscale:
+                    new_color = np.random.randint(0, 255, (1, 1), dtype=np.uint8)
+                    skip_grayscale.append(int(new_color))
+                # extend its demension size to 3 channels
+                new_color = np.repeat(new_color, 3, axis=-1)
+                # append to the end of new palette
+                palette = np.append(palette, new_color, axis=0)
+        # always reset the first part of new palette to the old palette, no matter what we have done
         palette[0 : p_size] = old_palette
 
     else:
@@ -811,7 +922,7 @@ def to_digital_palette(text_palette):
     p_size = len(digital_palette)
     return digital_palette, p_size
 
-def stroke_to_label(fill_map, stroke_map, precise=False):
+def stroke_to_label(fill_map, stroke_map, stroke_color, fill_palette, precise=False):
     '''
     Given:
         fill_map, labeled region map
@@ -820,6 +931,7 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
         the region index of which are selected by stroke map
     '''
     # threshold the stroke map
+    fill, palette = fill_palette
     if len(stroke_map.shape) == 3:
         stroke_map = cv2.cvtColor(stroke_map, cv2.COLOR_BGR2GRAY)
     stroke = stroke_map.copy()
@@ -835,7 +947,7 @@ def stroke_to_label(fill_map, stroke_map, precise=False):
         for l in stroke_label:
             if l == 0: continue
             mask = smap == l
-            labels_new.append(select_labels(fill_map, mask))
+            labels_new.append(select_labels(fill_map, mask, stroke_color, (fill, palette)))
         labels = np.unique(np.concatenate(labels_new))
     return labels
 
