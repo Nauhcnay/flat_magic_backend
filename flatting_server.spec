@@ -1,14 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-
-
+import os.path
 block_cipher = None
-
-
-a = Analysis(['src\\flatting_server.py'],
-             pathex=['L:\\2.Research_project\\3.flatting\\Pytorch-UNet'],
+a = Analysis(['src/flatting_server.py'],
+             ## pyinstaller iheartla.spec must be run from
+             ## ???
+             pathex=[os.path.abspath(os.getcwd())],
              binaries=[],
-             datas=[],
-             hiddenimports=["run", "thinning", "predict", "unet"],
+             datas=[('src/flatting/checkpoints','checkpoints')],
+             hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
              excludes=[],
@@ -27,7 +26,8 @@ exe = EXE(pyz,
           bootloader_ignore_signals=False,
           strip=False,
           upx=True,
-          console=True )
+          console=True,
+          icon='src/flatting/resources/flatting.ico' )
 coll = COLLECT(exe,
                a.binaries,
                a.zipfiles,
@@ -36,3 +36,9 @@ coll = COLLECT(exe,
                upx=True,
                upx_exclude=[],
                name='flatting_server')
+app = BUNDLE(coll,
+             name='flatting_server.app',
+             icon='src/flatting/resources/flatting.icns',
+             bundle_identifier=None,
+             info_plist={'NSHighResolutionCapable': 'True'}
+             )

@@ -3,14 +3,8 @@ from PIL import Image
 from io import BytesIO
 
 import numpy as np
-try:
-    from . import flatting_api
-except:
-    import flatting_api
-try:
-    from . import flatting_api_async
-except:
-    import flatting_api_async
+from . import flatting_api
+from . import flatting_api_async
 import base64
 import io
 import json

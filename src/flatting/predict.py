@@ -1,9 +1,10 @@
 import argparse
 import logging
 
-import os, sys
-from os.path import *
-sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
+import os
+# import os, sys
+# from os.path import *
+# sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 
 import numpy as np
 import torch
@@ -13,13 +14,9 @@ import cv2
 from PIL import Image
 from torchvision import transforms as T
 
-try:
-    from .unet import UNet
-    from .utils.preprocessing import to_point_list, find_bbox, crop_img
-except:
-    from unet import UNet
-    from utils.preprocessing import to_point_list, find_bbox, crop_img
-from run import region_get_map
+from .unet import UNet
+from .utils.preprocessing import to_point_list, find_bbox, crop_img
+from .trapped_ball.run import region_get_map
 
 
 def to_tensor(img):

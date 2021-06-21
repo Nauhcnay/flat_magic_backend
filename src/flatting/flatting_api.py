@@ -4,18 +4,14 @@ import cv2
 import torch
 
 from pathlib import Path
-from os.path import *
-sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
-sys.path.append(dirname(abspath(__file__)))
-from run import region_get_map, merge_to_ref, verify_region
-from thinning import thinning
+# from os.path import *
+# sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
+# sys.path.append(dirname(abspath(__file__)))
+from .trapped_ball.run import region_get_map, merge_to_ref, verify_region
+from .trapped_ball.thinning import thinning
 from PIL import Image
-try:
-    from .predict import predict_img
-    from .unet import UNet
-except:
-    from predict import predict_img
-    from unet import UNet
+from .predict import predict_img
+from .unet import UNet
 
 # global variables shared by all api functions
 nets = {}
