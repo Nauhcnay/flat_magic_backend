@@ -646,12 +646,14 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
         mask = fill_map_artist == r
         # if the mask selected more than one region, then we should refine this mask first
         # the split mask should always only select single region in fill map
-        selected_regions = np.unique(fill_map[mask])
+        selected_regions, selected_regions_counts = np.unique(fill_map[mask], return_counts=True)
         if len(selected_regions) > 1:
             for sr in selected_regions:
                 # if the selected region completly inside the mask, then we should exclude it
                 mask[fill_map == sr] = False
-            if mask.sum() < 5:
+            # if the artist region is totally coverd by the neural reigons and its size is less than the neural regions
+            # this probably means we should restore the small artist region
+            if mask.sum() < 5 and (fill_map == sr).sum() >= selected_regions_counts.sum() * 1.1:
                 mask = fill_map_artist == r
         elif len(selected_regions) == 1:
             # if this region has been splitted, we also need to skip it

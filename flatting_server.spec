@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+
 block_cipher = None
 
 
-a = Analysis(['src/flatting_server.py'],
-             pathex=['/Users/yotam/Work/GMU/flatting/code'],
+a = Analysis(['src\\flatting_server.py'],
+             pathex=['L:\\2.Research_project\\3.flatting\\Pytorch-UNet'],
              binaries=[],
              datas=[],
-             hiddenimports=[],
+             hiddenimports=["run", "thinning", "predict", "unet"],
              hookspath=[],
              runtime_hooks=[],
              excludes=[],
