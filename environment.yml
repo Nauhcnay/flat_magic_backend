@@ -12,6 +12,7 @@ dependencies:
   - scikit-image
   - pytorch
   - torchvision
+  - pyinstaller
   - pip
   - pip:
     - briefcase

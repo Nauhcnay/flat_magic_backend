@@ -2,7 +2,7 @@ import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import functools
 
-import flatting_api
+from . import flatting_api
 
 ## This controls the number of parallel processes.
 ## Keep in mind that parallel processes will load duplicate networks

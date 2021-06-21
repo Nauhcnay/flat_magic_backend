@@ -1,7 +1,7 @@
 
-from trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
-from trappedball_fill import get_ball_structuring_element, extract_line, to_masked_line
-from thinning import thinning
+from .trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
+from .trappedball_fill import get_ball_structuring_element, extract_line, to_masked_line
+from .thinning import thinning
 from skimage.morphology import skeletonize
 from PIL import Image
 from tqdm import tqdm
@@ -16,12 +16,12 @@ from os.path import *
 
 # use cython adjacency matrix
 try:
-    import adjacency_matrix
+    from . import adjacency_matrix
 ## If it's not already compiled, compile it.
 except:
     import pyximport
     pyximport.install()
-    import adjacency_matrix
+    from . import adjacency_matrix
 
 def extract_skeleton(img):
 

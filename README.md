@@ -69,7 +69,7 @@ On my setup, I have to manually edit `edit macOS/app/Flatting/Flatting.app/Conte
 
 If briefcase doesn't work, you can use [pyinstaller](https://www.pyinstaller.org/):
 
-    pyinstaller src/flatting_server.py
+    pyinstaller --noconfirm flatting_server.spec
 
 PyInstaller is not listed as a conda dependency, because it's optional. Manually install it via: `conda install -c conda-forge pyinstaller`.
 
