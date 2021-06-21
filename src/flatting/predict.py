@@ -3,7 +3,7 @@ import logging
 
 import os
 # import os, sys
-# from os.path import *
+from os.path import join
 # sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 
 import numpy as np

@@ -7,6 +7,7 @@ from pathlib import Path
 # from os.path import *
 # sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 # sys.path.append(dirname(abspath(__file__)))
+from os.path import exists, join
 from .trapped_ball.run import region_get_map, merge_to_ref, verify_region
 from .trapped_ball.thinning import thinning
 from PIL import Image
@@ -68,7 +69,6 @@ def initial_nets(force_refresh=False):
             # nets["1024_base"] = initial_models(path_1024_base)
             # nets["512"] = initial_models(path_512)
             # nets["512_base"] = initial_models(path_512_base)
-            
             path_512 = checkpoints/"base_512/"
             if "512" not in nets:
                 nets["512"] = initial_models(path_512)
@@ -405,23 +405,16 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     assert len(color_weights) == len(split_labels)
     color_weights = np.array(color_weights)
 
-    # criteria 1: the absolute size of merge stroke in each region should large enough. 
     DEBUG = False
     if DEBUG and for_split:
         print("Log:\tselect labels for spliting")
     elif DEBUG and for_split == False:
         print("Log:\tselect labels for merging")
-    
-    # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
-    criteria1 = split_labels_count.copy() * color_weights
-    criteria1 = criteria1 > criteria1.sum() * 0.15
-    if DEBUG:
-        print("Log\tgot stroke size as %s, it should greater than %f"%(str(split_labels_count), split_labels_count.sum() * 0.15))
-
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
     criteria2 = split_labels_count.copy() * color_weights
-    criteria2 = criteria2 / criteria2.max()
+    if criteria2.max() != 0:
+        criteria2 = criteria2 / criteria2.max()
     if DEBUG:
         print("Log\tgot stroke region ratio size as %s, it should greater than %f"%(str(criteria2), 0.25))
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
@@ -434,18 +427,29 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
 
     # criteria 4: if the region has been covered by more than 1/3, always select it
     criteria4 = []
+
+    # criteria 1: the size of the selected region in fill_map should be balance, we should
+    # exclude extreme cases, for example, the largest region is 1000 time larger than the smallest region
+    criteria1 = []
+    criteria1_thre = []
     for i, sl in enumerate(split_labels):
         if color_weights[i] < 1:
             criteria3.append(True) # always split for re-colorize
+            criteria1_thre.append(100) # if the region is greater than 100 times of smallest region, exclude it
         else:
             if split_labels_count.sum() < 45 ** 2:
                 criteria3.append(True)
             else:
-                criteria3.append(False)               
+                criteria3.append(False)
+            criteria1_thre.append(1000) # if this is the first time colorize, the threshold could be loose
+        criteria1.append((fill_map==sl).sum())               
         criteria4.append(split_labels_count[i] / (fill_map==sl).sum())
+    
     criteria3 = np.array(criteria3)
     criteria4 = np.array(criteria4) * color_weights
     
+    criteria1 = np.array(criteria1)
+    criteria1 = (criteria1 / criteria1.min()) < criteria1_thre
     if DEBUG:
         print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 45 ** 2))
 
@@ -495,6 +499,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
             # split to each single stroke in each stroke group
             _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
             stroke_label = np.unique(stroke_map)
+            skip_region = np.array([])
             for l in stroke_label:
                 if l == 0: continue # skip background
                 stroke_mask = stroke_map == l
@@ -502,8 +507,22 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                 split_labels_artist = select_labels(fill_map_artist, stroke_mask, color, 
                                                 (fill_map_fix, palette), for_split=True)
                 if len(split_labels_artist) > 0:
-                    fill_map, new_label = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
+                    fill_map, new_label = split_by_labels(split_labels_artist, 
+                                    fill_map, fill_map_artist, skip_region)
                     new_labels += new_label
+
+                # add to skip list after split, so we need to
+                # find all artist fill map region coverd by the final selection
+                skip_labels_nerual = select_labels(fill_map, stroke_mask, color, 
+                                                (fill_map_fix, palette))
+                if len(skip_labels_nerual) > 0:
+                    skip_mask = fill_map == skip_labels_nerual[0]
+                    skip_labels_nerual = np.delete(skip_labels_nerual, 0)
+                    
+                    for sl in skip_labels_nerual:
+                        skip_mask[fill_map==sl] = True
+
+                    skip_region = np.unique(np.append(skip_region, np.unique(fill_map_artist[skip_mask])))
 
                 '''
                 The old split code
@@ -600,7 +619,7 @@ def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
             "fill_color": fill,
             }
 
-def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
+def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region):
     '''
     A helper function for corase split
     '''
@@ -639,6 +658,7 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist):
     new_labels = [] # the new splited region means it will definitely be selected
     for r in split_labels_artist:
         if r in fixed_region: continue
+        if r in skip_region: continue
         mask = fill_map_artist == r
         # if the mask selected more than one region, then we should refine this mask first
         # the split mask should always only select single region in fill map
