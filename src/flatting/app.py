@@ -173,6 +173,7 @@ async def split_manual( request ):
     result['line_simplified'] = to_base64(splited['line_neural'])
     result['image'] = to_base64(splited['fill_color'])
     result['fill_artist'] = to_base64(splited['fill_artist'])
+    result['line_hint'] = to_base64(splited['line_hint'])
 
     return web.json_response(result)    
 

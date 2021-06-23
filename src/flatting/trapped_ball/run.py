@@ -2,13 +2,13 @@
 from .trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
 from .trappedball_fill import get_ball_structuring_element, extract_line, to_masked_line
 from .thinning import thinning
-from skimage.morphology import skeletonize
+# from skimage.morphology import skeletonize
 from PIL import Image
 from tqdm import tqdm
 
 import argparse
 import cv2
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import os
 import numpy as np
 

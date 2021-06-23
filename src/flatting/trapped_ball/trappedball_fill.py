@@ -16,7 +16,7 @@ except:
 from multiprocessing import Pool
 from multiprocessing import freeze_support
 from functools import partial
-from skimage.morphology import skeletonize, thin
+# from skimage.morphology import skeletonize, thin
 
 
 
