@@ -26,5 +26,6 @@
 # from concurrent.futures import ProcessPoolExecutor
 # import functools
 
-from flatting import app
-app.main()
+if __name__ == '__main__':
+    from flatting import app
+    app.main()
