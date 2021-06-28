@@ -11,6 +11,8 @@ import json
 import asyncio
 import multiprocessing
 
+MULTIPROCESS = True
+
 routes = web.RouteTableDef()
 
 # initialize models
@@ -86,8 +88,10 @@ async def flatsingle( request ):
     preview = data['preview']
     resize = data['resize']
 
-    # flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
-    flatted = flatting_api.run_single(img, net, radii, resize, preview)
+    if MULTIPROCESS:
+        flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
+    else:
+        flatted = flatting_api.run_single(img, net, radii, resize, preview)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
@@ -119,8 +123,10 @@ async def merge( request ):
     stroke = to_pil(data['stroke'])
     # palette = np.array(data['palette'])
     
-    # merged = await flatting_api_async.merge(fill_neural, fill_artist, stroke, line_artist)
-    merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
+    if MULTIPROCESS:
+        merged = await flatting_api_async.merge(fill_neural, fill_artist, stroke, line_artist)
+    else:
+        merged = flatting_api.merge(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['image'] = to_base64(merged['fill_color'])
@@ -165,8 +171,10 @@ async def split_manual( request ):
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
     
-    # splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist)
-    splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
+    if MULTIPROCESS:
+        splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist)
+    else:
+        splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])

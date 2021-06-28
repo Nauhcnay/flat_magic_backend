@@ -54,11 +54,15 @@ def initial_nets(force_refresh=False):
     '''
     global nets
     # print(os.listdir("./"))
-    checkpoints = Path(__file__).parent/'checkpoints'
+    if getattr(sys, 'frozen', False):
+        # We are running in a bundle.
+        checkpoints = Path(sys._MEIPASS)/'checkpoints'
+    else:
+        # We are running in a normal Python environment.
+        checkpoints = Path(__file__).parent.parent/'checkpoints'
+
     try:
         if len(nets) == 0 or force_refresh:
-
-
             # we currently load the baseline mode for test
             # will update new model later
             # path_1024 = "./src/flatting/checkpoints/rand_1024/"
