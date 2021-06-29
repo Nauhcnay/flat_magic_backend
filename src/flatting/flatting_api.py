@@ -174,7 +174,7 @@ def add_cropped_back(img_pil, bbox, img_size):
 
     return Image.fromarray(result)
 
-def run_single(line_artist, net, radius, resize, preview=False):
+def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     '''
     Given:
         line_artst, the line art drawn by artist, 
@@ -199,14 +199,6 @@ def run_single(line_artist, net, radius, resize, preview=False):
     line_input = add_white(line_artist)
     # resize the image if the frontend ask to do so
     if resize:
-        # compute the new size of input image
-        w, h = line_input.size
-        if w > h:
-            h_new = 2000
-            w_new = int(2000 * (w/h))
-        else:
-            w_new = 2000
-            h_new = int(2000 * (h/w))
         print("Log:\rresize image to size %d x %d (h x w)"%(h_new, w_new))
         line_input = line_input.resize((w_new, h_new))   
     # simplify artist line

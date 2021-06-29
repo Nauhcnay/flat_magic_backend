@@ -11,7 +11,7 @@ import json
 import asyncio
 import multiprocessing
 
-MULTIPROCESS = True
+MULTIPROCESS = False
 
 routes = web.RouteTableDef()
 
@@ -85,13 +85,17 @@ async def flatsingle( request ):
     img = to_pil(data['image'])
     net = str(data['net'])
     radii = int(data['radius'])
-    preview = data['preview']
     resize = data['resize']
+    if resize:
+        w_new, h_new = data["newSize"]
+    else:
+        w_new = None
+        h_new = None
 
     if MULTIPROCESS:
-        flatted = await flatting_api_async.run_single(img, net, radii, resize, preview)
+        flatted = await flatting_api_async.run_single(img, net, radii, resize, w_new, h_new)
     else:
-        flatted = flatting_api.run_single(img, net, radii, resize, preview)
+        flatted = flatting_api.run_single(img, net, radii, resize, w_new, h_new)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
