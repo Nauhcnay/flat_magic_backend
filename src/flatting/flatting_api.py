@@ -161,16 +161,27 @@ def add_cropped_back(img_pil, bbox, img_size):
     h2 = b - t
     w3, h3 = img_pil.size # resized croped size
     ratio = w3/w2 if w2 > h2 else h3/h2
+
+    # resize org size to neural output size (the size if we didn't crop the input)
     w1 = int(w1 * ratio + 0.5)
     h1 = int(h1 * ratio + 0.5)
     
+    # resize the bbox to the size level same as the input 
     t = int(t * ratio + 0.5)
     l = int(l * ratio + 0.5)
     b = int(b * ratio + 0.5)
     r = int(r * ratio + 0.5)
 
+    # pad the croped image back to w1 by h1
+    if (r-l != w3):
+        offset_w = r - l - w3
+        r = r - offset_w
+    if (b-t != h3):
+        offset_h = b - t - h3
+        b = b - offset_h
     result =  np.ones((h1, w1), dtype=np.uint8) * 255
-    result[t:b, l:r] = np.array(img_pil)[:b-t, :r-l]
+    # result[t:b, l:r] = np.array(img_pil)[:b-t, :r-l]
+    result[t:b, l:r] = np.array(img_pil)
 
     return Image.fromarray(result)
 
