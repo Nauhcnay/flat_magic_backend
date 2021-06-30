@@ -778,16 +778,18 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
             # becasue if the old region in fill map could still covered by the new 
             # mask, that means this region is not modified at all, and we should not 
             # change it.
-            remove_inside_regions(fill_map, mask, split_labels_neural)
+            remove_inside_regions(fill_map, mask, split_labels_neural, split_map_manual)
             if s == max_region:
                 fill_map[mask] = old_label
             else:
                 fill_map[mask] = next_label
                 next_label += 1
         
-    fill_map[fill_map==0] = fill_map.max() + 1
+    new_temp_label = fill_map.max() + 1
+    fill_map[fill_map==0] = new_temp_label
     fill_map[line_artist<240] = 0
     fill_map = thinning(fill_map)
+    fill_map[fill_map==new_temp_label] = 0
 
     # update neural line
     neural_line = fillmap_masked_line(fill_map)
@@ -819,7 +821,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
             "fill_artist": fill_artist,
             "line_hint": line_hint
             }
-def remove_inside_regions(fill_map, mask, region_list, remove_selected=False):
+def remove_inside_regions(fill_map, mask, region_list, split_map_manual, remove_selected=False):
     if remove_selected:
         for r in region_list:
             mask[fill_map==r] = False
