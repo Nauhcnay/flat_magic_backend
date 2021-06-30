@@ -195,10 +195,11 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     loaded_initial_nets = initial_nets()
     assert loaded_initial_nets
     global nets
-
     line_input = add_white(line_artist)
     # resize the image if the frontend ask to do so
     if resize:
+        h_new = int(h_new)
+        w_new = int(w_new)
         print("Log:\rresize image to size %d x %d (h x w)"%(h_new, w_new))
         line_input = line_input.resize((w_new, h_new))   
     # simplify artist line
@@ -220,18 +221,12 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     # we should add a multiprocess here
     print("Log:\ttrapping ball filling with radius %s"%str(radius))
 
-    if preview:
-        return region_get_map(line_simplify,
-                path_to_line_artist=line_input,  
-                radius_set=[int(radius)], percentiles=[0],
-                preview=preview
-                )
-    else:
-        fill_map, fill_map_neural, fill_map_artist = region_get_map(line_simplify,
-                                                    path_to_line_artist=line_input,  
-                                                    output_path = "./", # need to comment later
-                                                    radius_set=[int(radius)], percentiles=[0],
-                                                    )
+    
+    fill_map, fill_map_neural, fill_map_artist = region_get_map(line_simplify,
+                                                path_to_line_artist=line_input,  
+                                                output_path = "./", # need to comment later
+                                                radius_set=[int(radius)], percentiles=[0],
+                                                )
     # resize simplified line to original size
     line_simplify = line_simplify.resize(line_input.size)
 
@@ -600,6 +595,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
     line_neural = fillmap_masked_line(fill_map)
     line_neural = add_alpha(line_neural, line_color = "9ae42c", opacity = 0.7)
 
+    print("Log:\tmerge finished")
     return {"line_simplified": line_neural,
             "fill_color": fill,
             # "fill_integer": fill_map,
