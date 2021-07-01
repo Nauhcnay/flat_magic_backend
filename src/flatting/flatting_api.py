@@ -391,9 +391,33 @@ def is_grayscale(color):
     return r==g and g==b
 
 def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=False):
-    # construct the colorize weight, it need to consider if it is the re-colorzied case
-    # generally, we should tend to always split if the region has been assigned to a color
-    # and also put less weight to stroke that try to re-colorize
+    '''
+    Given
+        fill_map, fill map that want to choose regions from, it could be FF map or neural map
+        stroke_mask, boolean mask of user stroke
+        stroke_color, stroke color
+        fill_palette, the reference fill map and its palette, it should be a nerual map
+        for_split, switch for using different criterias, will be more likely to select 
+            FF regions if ON
+    Return
+        split_labels, the labels finally selected by the user stroke
+    Notes
+        1. The color should also be an important factor to consider which region should be selected
+            generally, we should tend to split (choose region in fill map) if we found the region 
+            is colorized (not grayscale color)   
+        2. User will always be inaccurate, their stroke could always go across the region boundary to a region
+            they don't really want to select. we should consider all possible those cases
+            2.1 Larger region should need larger stroke to select, in other word, a tiny user stroke 
+                should not be able to select a huge region in fill map
+            2.2 stroke should evenly distributed in all regions that he really wants
+            2.3 if a region is tiny and a stroke has cover most of its region, then the user definitely
+                want to select
+            2.4 there would be a ambiguous case that can't really have a good standard to infer user's intention
+                which is if a stroke if prefectly locate into both a FF region and neural region, it is really 
+                hard to tell which region to choose
+
+    '''
+    
     fill, palette = fill_palette
     split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     color_weights = []
@@ -512,42 +536,64 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
 def merge(fill_neural, fill_artist, merge_map, line_artist):
     '''
     Given:
-        fill_map, labeled region map
-        merge_map, a image contains merge stroke only
+        fill_neural, neural fill result as a image, same content as the "result_neural" layer
+        fill_artist, connectcomponent fill result, not shown in Photoshop
+        merge_map, color merge strokes, same as the "merge-hint" layer
+        line_artist, line art of artist, same as the "line_artist" layer
     Action:
-        merge all selected region to the largest one
+        1. try to split the selected region, upate the fill map
+        2. colorize the new fill map accroding to the merge stroke and its colors.
     '''
-    # get labels selected by merge stroke
     print("Log:\tmerging")
-    # get fill_map and palette
+    
+    # pixel map to label
     fill_map, palette = to_fillmap(fill_neural)
     fill_map_fix = fill_map.copy()
     fill_map_artist, _ = to_fillmap(fill_artist)
     line_artist = add_white(line_artist)
-    # merge_map = add_white(merge_map, return_numpy=True, grayscale=False)
-    # find how many merge strokes in merge map
-    # merge_map = np.array(Image.fromarray(merge_map).convert("RGB"))
+    
+    # group merge stroke by color
     strokes, stroke_palette = to_fillmap(np.array(merge_map))
-    # for each group of all strokes with the same color
+    
+    # split any possible region for each merge stroke group
     for i in range(len(stroke_palette)):
+        
+        # get stroke mask and its color
         color = stroke_palette[i]
-        # if (color == [255, 255, 255]).all(): continue # skip the white back ground
-        if (strokes == i).sum() < 4: continue 
+        if (strokes == i).sum() < 4: continue # ignore the stroke if it is too small (user will not notice it and unexpect results will happen)
         stroke = (1 - (strokes == i).astype(np.int)) * 255
-        # merge_labels = stroke_to_label(fill_map, stroke)
-
+        
+        # update fill map if neccessary, new_labels is the collection of new added labels
         def split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist):
+            '''
+            Given
+                stroke, merge stroke as BW image
+                color, stroke color
+                fill_map, neural fill map, it could be updated during the splitting
+                fill_map_fix, the first version fill map, it will be fixed during the whole merge function
+                fill_map_artist, flood fill (FF for short) fill map
+            Return
+                fill_map, updated fill map
+                new_labels, new added region labels
+            Action
+                if the merge stroke is locating in side both a FF and neural region, check if 
+                the user want to split this FF region, if yes, update the fill map
+            '''
             new_labels = []
-            # split to each single stroke in each stroke group
+            
+            # break up stroke group to single strokes
             _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
             stroke_label = np.unique(stroke_map)
-            skip_region = np.array([])
+            skip_region = np.array([]) # what skip region used for?
+            
+            # check split and split
             for l in stroke_label:
+                # check split
                 if l == 0: continue # skip background
                 stroke_mask = stroke_map == l
-                # stroke_color = stroke_palette
                 split_labels_artist = select_labels(fill_map_artist, stroke_mask, color, 
                                                 (fill_map_fix, palette), for_split=True)
+                # split
                 if len(split_labels_artist) > 0:
                     fill_map, new_label = split_by_labels(split_labels_artist, 
                                     fill_map, fill_map_artist, skip_region)
@@ -566,12 +612,6 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
 
                     skip_region = np.unique(np.append(skip_region, np.unique(fill_map_artist[skip_mask])))
 
-                '''
-                The old split code
-                '''
-                # if (stroke_size < 64**2 and len(split_labels_artist) == 1):
-                #     fill_map = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
-
             # refine new_labels
             for r in new_labels:
                 if r not in fill_map:
@@ -579,51 +619,35 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
             return fill_map, np.array(new_labels)
         fill_map, new_labels = split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist)
 
-        # split this region in fill artist into a different region
-
-        # if len(merge_labels) <= 1:
-        #     print("Log:\t(probably) inaccurate input, skip merge")
-        #     fill, palette = show_fillmap_auto(fill_map, palette)
-        #     line_neural = fillmap_masked_line(fill_map, line_artist)
-        #     line_neural = add_alpha(line_neural, line_color = "9ae42c")
-        #     return {"line_simplified": line_neural,
-        #             "fill_color": fill}
-
-        # need to update merge label again
+        # re-select regions in new fill map with the same region
         merge_labels = stroke_to_label(fill_map, stroke, color, (fill_map_fix, palette))
         merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
-        # update palette if the max label has greater than the size of the palette
+        
+        # update palette if it can't cover all regions in the new fill map
+        # this is very likely to happen cause the split may creat many new regions
         if fill_map.max() >= len(palette):
             palette = init_palette(fill_map.max()+1, palette)
 
-        # find max region
+        # find max region among the re-selected regions, then merge and re-colorize
         max_label = find_max_region(fill_map, merge_labels)
-
         if max_label != -1:
-            # merge all rest regions to max region
+            # merge
             for r in merge_labels:
                 if r == max_label: continue
                 mask = fill_map == r
                 fill_map[mask] = max_label
-            
-            # update region color
+            # re-colorize
             palette[max_label] = color
 
-    # visualize fill_map
+    # generate feedback results
     fill, _ = show_fillmap_auto(fill_map, palette)
     fill_map, _ = to_fillmap(fill)
-    # layers = get_layers(fill_map, palette)
-
-    # update neural line
     line_neural = fillmap_masked_line(fill_map)
     line_neural = add_alpha(line_neural, line_color = "9ae42c", opacity = 0.7)
-
     print("Log:\tmerge finished")
+
     return {"line_simplified": line_neural,
-            "fill_color": fill,
-            # "fill_integer": fill_map,
-            # "layers": layers,
-            # "palette": palette
+            "fill_color": fill
             }
 
 def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
@@ -667,15 +691,6 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region)
     '''
     A helper function for corase split
     '''
-
-    # if len(split_labels_artist) <= 1:
-    #     print("Log:\t(probably) inaccurate input, skip split auto")
-    #     neural_line = fillmap_masked_line(fill_map, line_artist)
-    #     neural_line = add_alpha(neural_line, line_color = "9ae42c")
-    #     fill, _ = show_fillmap_auto(fill_map, palette)
-    #     return {"line_neural": neural_line,
-    #             "fill_color": fill
-    #             }
 
     # find out the region that don't needs to be extract
     neural_to_artist = {} # map from fill_map to fill_map_artist, seems we don't use that mapping...
