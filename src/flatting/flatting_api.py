@@ -130,9 +130,9 @@ def add_alpha(img, line_color = None, opacity = 1):
 
     return img_alpha
 
-def fillmap_masked_line(fill_map, line_input=None):
+def fillmap_masked_line(fill_map, line_input=None, one_pixel=False):
     '''
-    Generate the hint line form the fill_map
+    A helper function to extract fill region boundary as lines
     '''
     # get the one-pixel width edge
     edges = cv2.Canny(fill_map.astype(np.uint8), 0, 0)
@@ -146,8 +146,9 @@ def fillmap_masked_line(fill_map, line_input=None):
         result[edges == 0] = 255
     else:
         # reverse the edge map
-        kernel = np.ones((3,3),np.uint8)
-        edges = cv2.dilate(edges, kernel, iterations = 1)
+        if one_pixel==False:
+            kernel = np.ones((2,2),np.uint8)
+            edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
         result = np.zeros(edges.shape, np.uint8)
         result[edges == 0] = 255
 
@@ -175,10 +176,20 @@ def add_cropped_back(img_pil, bbox, img_size):
     # pad the croped image back to w1 by h1
     if (r-l != w3):
         offset_w = r - l - w3
-        r = r - offset_w
+        if offset_w < 0 and r - offset_w >= w1:
+            l = l + offset_w
+        elif offset_w > 0 and r - offset_w >= w1:
+            l = l + offset_w - (r - offset_w - w1)
+        else:
+            r = r - offset_w
     if (b-t != h3):
         offset_h = b - t - h3
-        b = b - offset_h
+        if offset_h < 0 and b - offset_h >= h1:
+            t = t + offset_h
+        elif offset_h > 0 and b - offset_h >= h1:
+            t = t + offset_h - (b - offset_h - h1)
+        else:
+            b = b - offset_h
     result =  np.ones((h1, w1), dtype=np.uint8) * 255
     # result[t:b, l:r] = np.array(img_pil)[:b-t, :r-l]
     result[t:b, l:r] = np.array(img_pil)
@@ -600,6 +611,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
 
     # visualize fill_map
     fill, _ = show_fillmap_auto(fill_map, palette)
+    fill_map, _ = to_fillmap(fill)
     # layers = get_layers(fill_map, palette)
 
     # update neural line
@@ -716,26 +728,41 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region)
 
     return fill_map, new_labels
 
-def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
+def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_neural=True):
     '''
     Given:
-        fill_map, labeled final region map 
-        fill_map_artist, labeled region on artist line
-        split_map_manual, a image contains manual split stroke only, it should be precise
+        fill_neural, pixel map (colorized) from neural fill (transmitting png is faster than numpy array)
+        fill_artist, pixel map (colorized) from opencv connect components fill (flood fill)
+        split_map_manual, user split stroke
+        line_artist, input line art (could be modified by split brush) 
     Action:
-        split new regions into fill_map
+        split new region and assgin a random grayscale color, while keep other regions the same
     '''
     print("Log:\tfine splitting")
-    fill_map, palette = to_fillmap(fill_neural)
-    fill_map_artist, _ = to_fillmap(fill_artist)
-
+    
+    # remove alpha channel if neccessary
     line_artist = add_white(line_artist, return_numpy = True)
-    # neural_line = add_white(neural_line, return_numpy = True)
     split_map_manual = add_white(split_map_manual, return_numpy = True)
 
     # convert split map to grayscale
     if len(split_map_manual.shape) == 3:
         split_map_manual = cv2.cvtColor(split_map_manual, cv2.COLOR_BGR2GRAY)
+
+    # generate label fill map
+    fill_map, palette = to_fillmap(fill_neural)
+    
+    # here we need a special artist fill map, which need to be generated on the fly (I don't like stroke and tranmit the same data repeatly)
+    if fix_neural:
+        line_artist_copy = line_artist.copy()
+        neural_line = np.array(fillmap_masked_line(fill_map))
+        line_artist_copy[line_artist_copy >= 250] = 255
+        line_artist_copy[line_artist_copy < 250] = 0
+        line_artist_copy[split_map_manual < 250] = 0
+        line_artist_copy[neural_line < 250] = 0
+        _, fill_map_artist = cv2.connectedComponents(line_artist_copy, connectivity=8)
+        fill_map_artist = thinning(fill_map_artist)
+    else:
+        fill_map_artist, _ = to_fillmap(fill_artist)
 
     # merge user modify to lines
     line_artist[split_map_manual < 240] = 0
@@ -763,7 +790,12 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     # label_old = find_region(fill_map, merged_mask)
     split_single_region = np.zeros(fill_map.shape, dtype=np.uint8)
     split_single_region[merged_mask] = 1
-    split_single_region[line_artist < 240] = 0
+    
+    if fix_neural:
+        split_single_region[line_artist_copy < 240] = 0
+    else:
+        split_single_region[line_artist < 240] = 0
+    
     _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
     regions = np.unique(split_regions)
     regions = regions[regions != 0]
@@ -787,7 +819,12 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
         
     new_temp_label = fill_map.max() + 1
     fill_map[fill_map==0] = new_temp_label
-    fill_map[line_artist<240] = 0
+
+    if fix_neural:
+        fill_map[line_artist_copy<240] = 0
+    else:
+        fill_map[line_artist<240] = 0
+
     fill_map = thinning(fill_map)
     fill_map[fill_map==new_temp_label] = 0
 
@@ -803,9 +840,21 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     fill, palette = show_fillmap_auto(fill_map, palette)
 
     # update the fill_artist map
-
-    _, fill_map_artist_new = cv2.connectedComponents((line_artist > 240).astype(np.uint8), connectivity=8)
+    if fix_neural:
+        _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
+    else:
+        _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
+    
+    # clean up regions that less than 0.5% image area
+    fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
+    tiny_regions = fill_new[fill_new_count<0.00005*fill_map_artist_new.size]
+    tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
+    for r in tiny_regions:
+        tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
+    fill_map_artist_new[tiny_mask] = 0
     fill_map_artist_new = thinning(fill_map_artist_new)
+    
+    # update to new fill artist
     fill_artist, _ = show_fillmap_auto(fill_map_artist_new)
     # layers = get_layers(fill_map, palette)
 
@@ -814,14 +863,17 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist):
     line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
     line_artist = add_alpha(Image.fromarray(line_artist))
     print("Log:\tdone")
-
     return {"line_artist": line_artist,
             "line_neural": neural_line,
             "fill_color": fill,
             "fill_artist": fill_artist,
             "line_hint": line_hint
             }
+
 def remove_inside_regions(fill_map, mask, region_list, split_map_manual, remove_selected=False):
+    '''
+    A helper function to remove regions that should not be splited in each given split mask
+    '''
     if remove_selected:
         for r in region_list:
             mask[fill_map==r] = False
