@@ -218,122 +218,57 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     assert loaded_initial_nets
     global nets
     line_input = add_white(line_artist)
-    # resize the image if the frontend ask to do so
+    
+    # resize the input if resize flag is on
     if resize:
         h_new = int(h_new)
         w_new = int(w_new)
         print("Log:\rresize image to size %d x %d (h x w)"%(h_new, w_new))
         line_input = line_input.resize((w_new, h_new))   
+    
     # simplify artist line
     if str(nets[net][1]) == 'cpu':
         print("Warning:\tno gpu found, using cpu mode, the inference may be slow")
-    
     print("Log:\tsimplify artist line")
     size = int(net.split("_")[0])
-    line_simplify, bbox = predict_img(net=nets[net][0],
+    line_neural, bbox = predict_img(net=nets[net][0],
                            full_img=line_input,
                            device=nets[net][1],
                            size = int(size))  
     del nets[net]
     torch.cuda.empty_cache()
-    
-    line_simplify = add_cropped_back(line_simplify, bbox, line_input.size)        
+    line_neural = add_cropped_back(line_neural, bbox, line_input.size)
 
-    # filling and refine
-    # we should add a multiprocess here
+    # refine filling result
     print("Log:\ttrapping ball filling with radius %s"%str(radius))
+    fill_map, fill_map_artist, fill_color_final, \
+    fill_color_neural,  fill_color_artist= region_get_map(line_neural,
+                                        path_to_line_artist=line_input,  
+                                        radius_set=[int(radius)], percentiles=[0],
+                                        )
 
-    
-    fill_map, fill_map_neural, fill_map_artist = region_get_map(line_simplify,
-                                                path_to_line_artist=line_input,  
-                                                output_path = "./", # need to comment later
-                                                radius_set=[int(radius)], percentiles=[0],
-                                                )
-    # resize simplified line to original size
-    line_simplify = line_simplify.resize(line_input.size)
-
-    # line_simplify = cv2.resize(line_simplify, line_artist.size, interpolation = cv2.INTER_NEAREST)
-
-    # color fill map for visualize
+    # colorize fill maps with gray scale
     drop_small_regions(fill_map_artist)
     fill_map_artist = verify_region(fill_map_artist, True)
-    
-
     fill, _ = show_fillmap_auto(fill_map)
+    fill_artist = fill_color_artist
 
-    fill_artist, _ = show_fillmap_auto(fill_map_artist)
-
-    # refine the neural line
+    # generate line hint layers
     line_simplify = fillmap_masked_line(fill_map)
     line_hint = fillmap_masked_line(fill_map_artist)
-
-    # add alpha channel back to line arts
     line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 0.7)
     line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
     line_artist = add_alpha(line_input)
 
-    
-
     return {
         'line_artist': line_artist,
         'line_hint': line_hint,
-        'line_simplified': line_simplify,
+        'line_simplified': line_simplify, 
         'fill_color': fill,
-        # 'fill_integer': fill_map,
         'components_color': fill_artist,
-        # 'components_integer': fill_map_artist,
-        # 'components_layers': layers_artist,
-        # 'palette': palette
+        "fill_color_neural": fill_color_neural,
+        "line_neural": line_neural
         }
-
-def run_multiple(line_artist_list, net_list, radius_list, preview=False):
-    '''
-    Given:
-        line_artist_list, a list of artist line art, now we assume it will always be numpy array
-        net, the name of model
-        radius, the radius for trapped ball filling
-    Return:
-        result lists
-    '''
-    assert len(line_artist_list) == len(net_list)
-    assert len(net_list) == len(radius_list)
-
-    line_sim_list = []
-    fill_list = []
-    fill_map_list = []
-    # layers_list = []
-    fill_artist_list = []
-    fill_map_artist_list = []
-    # layers_artist_list = []
-    palette_list = []
-
-    for i in range(len(line_artist_list)):
-        if preview:
-            result = run_single(line_artist_list[i], net_list[i], radius_list[i], preview=True)
-            fill_list.append(result)
-
-        else:
-            results = run_single(line_artist_list[i], net_list[i], radius_list[i])
-
-            line_sim_list.append(results['line_simplified'])
-            fill_list.append(results['fill_color'])
-            fill_map_list.append(results['fill_integer'])
-            # layers_list.append(results['layers'])
-            fill_artist_list.append(results['components_color'])
-            fill_map_artist_list.append(results['components_integer'])
-            # layers_artist_list.append(results['components_layers'])
-            palette_list.append(results['palette'])
-    
-    return {
-        'line_simplified': line_sim_list,
-        'fill_color': fill_list,
-        'fill_integer': fill_map_list,
-        # 'layers': layers_list,
-        'components_color': fill_artist_list,
-        'components_integer': fill_map_artist_list,
-        # 'components_layers': layers_artist_list
-        'palettes': palette_list
-        }    
 
 def to_fillmap(image):
     '''

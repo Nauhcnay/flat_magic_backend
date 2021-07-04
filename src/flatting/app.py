@@ -1,76 +1,28 @@
 from aiohttp import web
 from PIL import Image
 from io import BytesIO
+from datetime import datetime
+from os.path import join, exists
 
 import numpy as np
 from . import flatting_api
 from . import flatting_api_async
 import base64
+import os
 import io
 import json
 import asyncio
 import multiprocessing
 
 MULTIPROCESS = False
+LOG = True
 
 routes = web.RouteTableDef()
-
-# initialize models
-# UPDATE: Don't initialize models here, let our multiprocessing processes do it.
-# loaded_initial_nets = flatting_api.initial_nets()
-# assert loaded_initial_nets
 
 @routes.get('/')
 # seems the function name is not that important?
 async def hello(request):
     return web.Response(text="Flatting API server is running")
-
-@routes.post('/flatmultiple')
-async def flatmultiple( request ):
-    print( "WARNING: flatmultiple() called. Does not use the flatting_api_async." )
-    
-    # read input
-    # how to test my API if I want to send a post request?
-    # I guess data is python object already
-    # this may similar to json.loads()
-    data = await request.json()
-    data = json.loads(data)
-
-    # convert data to function input
-    # img should be a PIL.Image
-    # net should be string
-    # radius should be int
-    # preview should be boolean
-    imgs = [ to_pil(byte) for byte in data['image'] ]
-    nets = data['net']
-    radii = data['radius']
-    preview = data['preview']
-
-    # run function in back end
-    flatted = flatting_api.run_multiple(imgs, nets, radii, preview)
-    
-    # construct and return the result
-    result = {}
-    result['line_simplified'] = [ to_base64(img) for img in flatted["line_simplified"] ]
-    result['image'] = [ to_base64(img) for img in flatted['fill_color'] ]
-    result['fillmap'] = [fillmap.tolist() for fillmap in flatted['fill_integer'] ]
-    # layers would be more complex, but it should bascially same as image
-    # may we should let layers generated at client side, that will reduce a lot of computation and transmission time
-    # result['layers'] = []
-    # for layers in flatted['layers']:
-    #     result['layers'].append([ to_base64(img) for img in layers ])
-    
-    result['image_c'] = [ to_base64(img) for img in flatted['components_color'] ]
-    result['fillmap_c'] = [fillmap_c.tolist()  for fillmap_c in flatted['components_integer'] ]
-    # result['layers_c'] = []
-    # for layers_c in flatted['components_layers']:
-    #     result['layers_c'] = [ to_base64(img) for img in layers_c ]
-
-    result['palette'] = [palette.tolist() for palette in flatted['palette']]
-
-    # https://docs.aiohttp.org/en/stable/web_reference.html
-    # Return Response with predefined 'application/json' content type and data encoded by dumps parameter (json.dumps() by default).
-    return web.json_response( result )
 
 ## Add more API entry points
 @routes.post('/flatsingle')
@@ -86,6 +38,9 @@ async def flatsingle( request ):
     net = str(data['net'])
     radii = int(data['radius'])
     resize = data['resize']
+    if 'userName' in data:
+        user = data['userName']
+    img_name = data['fileName']
     if resize:
         w_new, h_new = data["newSize"]
     else:
@@ -103,16 +58,19 @@ async def flatsingle( request ):
     result['line_simplified'] = to_base64(flatted['line_simplified'])
     result['image'] = to_base64(flatted['fill_color'])
     result['fill_artist'] = to_base64(flatted['components_color'])
-    # result['fillmap'] = to_base64(flatted['fill_integer'])
-
+    
+    if LOG:
+        now = datetime.now()
+        save_to_log(now, flatted['line_artist'], user, img_name, "line_artist", "flat")
+        save_to_log(now, flatted['line_hint'], user, img_name, "line_hint", "flat")
+        save_to_log(now, flatted['line_simplified'], user, img_name, "line_simplified", "flat")
+        save_to_log(now, flatted['fill_color'], user, img_name, "fill_color", "flat")
+        save_to_log(now, flatted['components_color'], user, img_name, "fill_color_floodfill", "flat")
+        save_to_log(now, flatted['fill_color_neural'], user, img_name, "fill_color_neural", "flat")
+        save_to_log(now, flatted['line_neural'], user, img_name, "line_neural", "flat")
+        print("Log:\tlogs saved")
     return web.json_response( result )
                 
-@routes.post('/refreshnet')
-async def refreshnet( request ):
-    raise RuntimeError("Won't work with flatting_api_async")
-    
-    return web.json_response(flatting_api.initial_nets(True))
-
 @routes.post('/merge')
 async def merge( request ):
     data = await request.json()
@@ -125,6 +83,9 @@ async def merge( request ):
     fill_neural = np.array(to_pil(data['fill_neural']))
     fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = to_pil(data['stroke'])
+    if 'userName' in data:
+        user = data['userName']
+    img_name = data['fileName']
     # palette = np.array(data['palette'])
     
     if MULTIPROCESS:
@@ -135,32 +96,15 @@ async def merge( request ):
     result = {}
     result['image'] = to_base64(merged['fill_color'])
     result['line_simplified'] = to_base64(merged['line_simplified'])
+    if LOG:
+        now = datetime.now()
+        save_to_log(now, merged['line_simplified'], user, img_name, "line_simplified", "merge")
+        save_to_log(now, merged['fill_color'], user, img_name, "fill_color", "merge")
+        save_to_log(now, stroke, user, img_name, "merge_stroke", "merge")
+        save_to_log(now, fill_artist, user, img_name, "fill_color_floodfill", "merge")
+        print("Log:\tlogs saved")
 
     return web.json_response(result)
-
-@routes.post('/splitauto')
-async def split_auto( request ):
-    print( "WARNING: split_auto() called. Does not use the flatting_api_async." )
-    
-    data = await request.json()
-    try:
-        data = json.loads(data)
-    except:
-        print("got dict directly")
-    
-    fill_neural = np.array(to_pil(data['fill_neural']))
-    fill_artist = np.array(to_pil(data['fill_artist']))
-    line_artist = np.array(to_pil(data['line_artist']))
-    stroke = to_pil(data['stroke'])
-    
-    splited = flatting_api.split_auto(fill_neural, fill_artist, stroke, line_artist)
-
-    result = {}
-    result['image'] = to_base64(splited['fill_color'])
-    result['line_simplified'] = to_base64(splited['line_neural'])
-
-    return web.json_response(result)
-
 
 @routes.post('/splitmanual')
 async def split_manual( request ):
@@ -174,11 +118,15 @@ async def split_manual( request ):
     fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
+    fix_neural = data['mode']
+    if 'userName' in data:
+        user = data['userName']
+    img_name = data['fileName']
     
     if MULTIPROCESS:
-        splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist)
+        splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist, fix_neural)
     else:
-        splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist)
+        splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist, fix_neural)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
@@ -187,6 +135,15 @@ async def split_manual( request ):
     result['fill_artist'] = to_base64(splited['fill_artist'])
     result['line_hint'] = to_base64(splited['line_hint'])
 
+    if LOG:
+        now = datetime.now()
+        save_to_log(now, splited['line_neural'], user, img_name, "line_simplified", "split_%s"%str(fix_neural))
+        save_to_log(now, splited['line_artist'], user, img_name, "line_artist", "split_%s"%str(fix_neural))
+        save_to_log(now, splited['fill_color'], user, img_name, "fill_color", "split_%s"%str(fix_neural))
+        save_to_log(now, stroke, user, img_name, "split_stroke", "split_%s"%str(fix_neural))
+        save_to_log(now, splited['fill_artist'], user, img_name, "fill_color_floodfill", "split_%s"%str(fix_neural))
+        save_to_log(now, splited['line_hint'], user, img_name, "line_hint", "split_%s"%str(fix_neural))
+        print("Log:\tlogs saved")
     return web.json_response(result)    
 
 @routes.post('/showfillmap')
@@ -225,11 +182,22 @@ def to_pil(byte):
     byte = base64.b64decode(byte)
     return Image.open(BytesIO(byte))
 
+def save_to_log(date, data, user, img_name, save_name, op):
+    save_folder = "[%s][%s][%s_%s]"%(user, str(date.strftime("%b-%m-%Y %H-%M-%S")), img_name, op)
+    save_folder = join("./logs", save_folder)
+    if exists(save_folder) == False:
+        os.makedirs(save_folder)
+    try:
+        if type(data) == np.ndarray:
+            Image.fromarray(data).save(join(save_folder, "%s.png"%save_name))
+        else:
+            data.save(join(save_folder, "%s.png"%save_name))
+    except:
+        print("Warning:\tsave log failed!")
+
 def main():
     app = web.Application(client_max_size = 1024 * 1024 ** 2)
     app.add_routes(routes)
-    
-    # ToDo: start two server
     web.run_app(app)
     
     ## From JavaScript:

@@ -136,26 +136,26 @@ def region_get_map(path_to_line_sim,
     # read files
     img, name = read_png(path_to_line_sim)
     line_artist_fullsize, _ = read_png(path_to_line_artist)
-    line_artist_fullsize = cv2.adaptiveThreshold(line_artist_fullsize, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
+    if len(line_artist_fullsize.shape) == 3:
+        line_artist_fullsize = cv2.cvtColor(line_artist_fullsize, cv2.COLOR_BGR2GRAY)
+    # line_artist_fullsize = cv2.adaptiveThreshold(line_artist_fullsize, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
     
     print("Log:\ttrapped ball filling")
-    # line_simplify = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
-    _, line_simplify = cv2.threshold(img, 125, 255, cv2.THRESH_BINARY)
+    # threshold line arts before filling
+    _, line_simplify = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
+    _, line_artist_fullsize = cv2.threshold(line_artist_fullsize, 200, 255, cv2.THRESH_BINARY)
     fills = []
     result = line_simplify # this should be line_simplify numpu array
-    
-    if len(line_artist_fullsize.shape) == 3:
-        line = cv2.cvtColor(line_artist_fullsize, cv2.COLOR_BGR2GRAY)
-    else:
-        line = line_artist_fullsize
+    line = line_artist_fullsize.copy() # change to a shorter name
     
     # may be resize the original line is not a good idea
     if line.shape[:2] != line_simplify.shape[:2]:
         line = cv2.resize(line, (line_simplify.shape[1],line_simplify.shape[0]), 
                         interpolation = cv2.INTER_AREA)
-    _, line_artist = cv2.threshold(line, 125, 255, cv2.THRESH_BINARY)
+    _, line_artist = cv2.threshold(line, 200, 255, cv2.THRESH_BINARY)
     assert len(radius_set) == len(percentiles)
 
+    # trapped ball fillilng
     for i in range(len(radius_set)):
         fill = trapped_ball_fill_multi(result, radius_set[i], percentile=percentiles[i])    
         fills += fill
@@ -164,30 +164,29 @@ def region_get_map(path_to_line_sim,
             cv2.imwrite("%d.r%d_per%.2f.png"%(i+1, radius_set[i], percentiles[i]), 
                 show_fill_map(build_fill_map(result, fills)))            
 
-    # maybe we should add a early stop
+    # fill up remaining regions if there still have
     fill = flood_fill_multi(result)
     fills += fill
 
-    # give each region a identify number
-    # could we do something to imporve the fill map?
+    # convert fill mask to fill map
     fillmap_neural = build_fill_map(result, fills)
     if visualize_steps:
         i+=1
         cv2.imwrite("%d.final_fills.png"%i, show_fill_map(fillmap_neural))
     
-    # merge small pieces into large region, but what is the mergeing stradegy?
+    # final refine, remove tiny regions in the fill map
     fillmap_neural = merge_fill(fillmap_neural)
-    
     if visualize_steps:
         i+=1
         cv2.imwrite("%d.merged.png"%i, show_fill_map(fillmap_neural))
     
+    # remove the line art region
     fillmap_neural = thinning(fillmap_neural)
-    
     if visualize_steps:
         i+=1
         cv2.imwrite("%d.fills_final.png"%i, show_fill_map(fillmap_neural))
 
+    # upscale neural fill map back to original size
     fillmap_neural_fullsize = cv2.resize(fillmap_neural.astype(np.uint8), 
                                 (line_artist_fullsize.shape[1], line_artist_fullsize.shape[0]), 
                                 interpolation = cv2.INTER_NEAREST)
@@ -198,15 +197,13 @@ def region_get_map(path_to_line_sim,
         fill_neural_fullsize[line_artist_fullsize < 125] = 0
         return Image.fromarray(fill_neural_fullsize.astype(np.uint8))
 
-
+    ## bleeding removal
+    # prepare nerual map and  FF map with full size
     fill_neural = show_fill_map(fillmap_neural)
-
     fill_neural_line = fill_neural.copy()
-    fill_neural_line[line_simplify == 0] = 0
-
+    fill_neural_line[line_simplify < 200] = 0
     fillmap_artist_fullsize = np.ones(fillmap_neural_fullsize.shape, dtype=np.uint8) * 255
     fillmap_artist_fullsize[line_artist_fullsize < 125] = 0
-    
     _, fillmap_artist_fullsize_c = cv2.connectedComponents(fillmap_artist_fullsize, connectivity=8)
 
     print("Log:\tcompute cartesian product")
@@ -235,23 +232,24 @@ def region_get_map(path_to_line_sim,
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
     # fill_neural_fullsize[line_artist_fullsize < 125] = 0
 
-    if output_path is not None:
+    # if output_path is not None:
 
-        print("Log:\tsave final fill at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
-        cv2.imwrite(os.path.join(output_path, str(name)+"_fill.png"), fill_neural_fullsize)
+    #     print("Log:\tsave final fill at %s"%os.path.join(output_path, str(name)+"_fill.png"))        
+    #     cv2.imwrite(os.path.join(output_path, str(name)+"_fill.png"), fill_neural_fullsize)
         
-        print("Log:\tsave neural fill at %s"%os.path.join(output_path, str(name)+"_neural.png"))
-        cv2.imwrite(os.path.join(output_path, str(name)+"_neural.png"), fill_neural)
+    #     print("Log:\tsave neural fill at %s"%os.path.join(output_path, str(name)+"_neural.png"))
+    #     cv2.imwrite(os.path.join(output_path, str(name)+"_neural.png"), fill_neural)
         
-        print("Log:\tsave fine fill at %s"%os.path.join(output_path, str(name)+"_fine.png"))
-        cv2.imwrite(os.path.join(output_path, str(name)+"_fine.png"), 
-            show_fill_map(fillmap_artist_fullsize_c))
+    #     print("Log:\tsave fine fill at %s"%os.path.join(output_path, str(name)+"_fine.png"))
+    #     cv2.imwrite(os.path.join(output_path, str(name)+"_fine.png"), 
+    #         show_fill_map(fillmap_artist_fullsize_c))
     
     print("Log:\tdone")
     if return_numpy:
         return fill_neural, fill_neural_line, fill_artist_fullsize, fill_neural_fullsize
     else:
-        return fillmap_neural_fullsize, fillmap_neural_fullsize_c, fillmap_artist_fullsize_c
+        return fillmap_neural_fullsize, fillmap_artist_fullsize_c,\
+            fill_neural_fullsize, fill_neural, fill_artist_fullsize
 
 def fillmap_cartesian_product(fill1, fill2):
     '''
