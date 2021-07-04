@@ -186,7 +186,7 @@ def to_pil(byte):
     return Image.open(BytesIO(byte))
 
 def save_to_log(date, data, user, img_name, save_name, op):
-    save_folder = "[%s][%s][%s_%s]"%(user, str(date.strftime("%b-%m-%Y %H-%M-%S")), img_name, op)
+    save_folder = "[%s][%s][%s_%s]"%(user, str(date.strftime("%d-%b-%Y %H-%M-%S")), img_name, op)
     save_folder = join("./logs", save_folder)
     if exists(save_folder) == False:
         os.makedirs(save_folder)

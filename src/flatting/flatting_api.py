@@ -331,15 +331,15 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
         fill_map, fill map that want to choose regions from, it could be FF map or neural map
         stroke_mask, boolean mask of user stroke
         stroke_color, stroke color
-        fill_palette, the reference fill map and its palette, it should be a nerual map
-        for_split, switch for using different criterias, will be more likely to select 
+        fill_palette, the reference fill map and its palette, it should be a neural map
+        for_split, switch for using different criteria, will be more likely to select 
             FF regions if ON
     Return
         split_labels, the labels finally selected by the user stroke
     Notes
         1. The color should also be an important factor to consider which region should be selected
             generally, we should tend to split (choose region in fill map) if we found the region 
-            is colorized (not grayscale color)   
+            is colorized (not gray-scale color)   
         2. User will always be inaccurate, their stroke could always go across the region boundary to a region
             they don't really want to select. we should consider all possible those cases
             2.1 Larger region should need larger stroke to select, in other word, a tiny user stroke 
@@ -348,21 +348,23 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
             2.3 if a region is tiny and a stroke has cover most of its region, then the user definitely
                 want to select
             2.4 there would be a ambiguous case that can't really have a good standard to infer user's intention
-                which is if a stroke if prefectly locate into both a FF region and neural region, it is really 
+                which is if a stroke if perfectly locate into both a FF region and neural region, it is really 
                 hard to tell which region to choose
 
     '''
     
     fill, palette = fill_palette
-    split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
+    split_labels, split_labels_count = fast_unique_2d(fill_map, stroke_mask, True)
+    # split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     color_weights = []
 
-    # criteria 5: whenever the bursh selected the region in fill_map is completely covered by the same region in 
+    # criteria 5: whenever the brush selected the region in fill_map is completely covered by the same region in 
     # fill_map_artist, we should NOT select the larger region
     criteria5 = []
 
     for sl in split_labels:
-        sp = np.unique(fill[fill_map==sl])
+        sp = fast_unique_2d(fill, fill_map==sl)
+        # sp = np.unique(fill[fill_map==sl])
         # if the region in fill_map is covered by the concurrent region in fill
         # find the largest region's color as the selected color
         # generally, we need to build up a relation between fill map and fill
@@ -393,7 +395,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
             color_weights.append(1) # if first time colorize, give the highest weight
         elif (palette[sp_max] == stroke_color).all():
             # if the region has be colorized and have the same color as the current stroke
-            # igonre that region
+            # ignore that region
             color_weights.append(0) 
         else:
             color_weights.append(0.8)
@@ -498,8 +500,8 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
         if (strokes == i).sum() < 4: continue # ignore the stroke if it is too small (user will not notice it and unexpect results will happen)
         stroke = (1 - (strokes == i).astype(np.int)) * 255
         
-        # update fill map if neccessary, new_labels is the collection of new added labels
-        def split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist):
+        # update fill map if necessary, new_labels is the collection of new added labels
+        def split_in_merge(stroke, color, fill_map, fill_map_fix, palette, fill_map_artist):
             '''
             Given
                 stroke, merge stroke as BW image
@@ -519,7 +521,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
             # break up stroke group to single strokes
             _, stroke_map = cv2.connectedComponents((255 - stroke).astype(np.uint8), connectivity=8)
             stroke_label = np.unique(stroke_map)
-            skip_region = np.array([]) # what skip region used for?
+            skip_region = np.array([])
             
             # check split and split
             for l in stroke_label:
@@ -535,31 +537,46 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                     new_labels += new_label
 
                 # add to skip list after split, so we need to
-                # find all artist fill map region coverd by the final selection
+                # find all artist fill map region covered by the final selection
+                # if a region has been split, then we definitely don't need to split it again
+                # but ... could this line be changed to a faster way?
                 skip_labels_nerual = select_labels(fill_map, stroke_mask, color, 
                                                 (fill_map_fix, palette))
+                # update skip region in FF map, and also check the connectivity of selected region
+                # in neural map, add additional split if it contains more than 1 sub regions.
                 if len(skip_labels_nerual) > 0:
-                    skip_mask = fill_map == skip_labels_nerual[0]
-                    skip_labels_nerual = np.delete(skip_labels_nerual, 0)
-                    
+                    skip_mask = np.zeros(fill_map.shape).astype(np.bool)                
                     for sl in skip_labels_nerual:
-                        skip_mask[fill_map==sl] = True
-
-                    skip_region = np.unique(np.append(skip_region, np.unique(fill_map_artist[skip_mask])))
+                        # if the selected region contains server disconnected regions, split the selected one
+                        skip_mask_sl = fill_map==sl
+                        _, skip_mask_cc, stats, _ = cv2.connectedComponentsWithStats(skip_mask_sl.astype(np.uint8), connectivity=8)
+                        if len(stats) > 2:
+                            split_label = fast_unique_2d(skip_mask_cc, stroke_mask)
+                            split_label = split_label[split_label != 0]
+                            assert len(split_label) == 1
+                            next_label = fill_map.max() + 1
+                            iso_mask = skip_mask_cc==split_label    
+                            fill_map[iso_mask] = next_label
+                            new_labels.append(next_label)
+                            skip_mask[iso_mask] = True                           
+                        else:
+                            skip_mask[skip_mask_sl] = True                    
+                    skip_region = np.unique(np.append(skip_region, fast_unique_2d(fill_map_artist, skip_mask)))
 
             # refine new_labels
             for r in new_labels:
                 if r not in fill_map:
                     new_labels.remove(r)
             return fill_map, np.array(new_labels)
-        fill_map, new_labels = split_in_merge(stroke, color, fill_map, fill_map_fix, fill_map_artist)
+        fill_map, new_labels = split_in_merge(stroke, color, fill_map, fill_map_fix, palette, fill_map_artist)
 
         # re-select regions in new fill map with the same region
         merge_labels = stroke_to_label(fill_map, stroke, color, (fill_map_fix, palette))
         merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
         
+
         # update palette if it can't cover all regions in the new fill map
-        # this is very likely to happen cause the split may creat many new regions
+        # this is very likely to happen cause the split may create many new regions
         if fill_map.max() >= len(palette):
             palette = init_palette(fill_map.max()+1, palette)
 
@@ -584,6 +601,24 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
     return {"line_simplified": line_neural,
             "fill_color": fill
             }
+
+def fast_unique_2d(array_maps, mask, return_counts=False):
+    crop_bbox = find_mask_bbox(mask)
+    return np.unique(crop_by_bbox(array_maps, crop_bbox)[crop_by_bbox(mask, crop_bbox)], 
+        return_counts=return_counts)
+
+def crop_by_bbox(array_maps, bbox):
+    '''
+    A helper function to remove unnecessary labels, hope this could make the np.unique faster
+    '''
+    t, l, b, r = bbox
+    return array_maps[t:b, l:r]
+
+def find_mask_bbox(mask):
+    l, t, w, h = cv2.boundingRect(mask.astype(np.uint8))
+    b = t + h
+    r = l + w
+    return (t, l, b, r)
 
 def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
     '''
@@ -630,7 +665,8 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region)
     # find out the region that don't needs to be extract
     neural_to_artist = {} # map from fill_map to fill_map_artist, seems we don't use that mapping...
     for r in split_labels_artist: # r is the region in fine split regions selected by stroke
-        rn = np.unique(fill_map[fill_map_artist == r]) # find regions that locate at the same position in neural fill map
+        rn = fast_unique_2d(fill_map, fill_map_artist == r)# find regions that locate at the same position in neural fill map
+        # rn = np.unique(fill_map[fill_map_artist == r]) 
         for s in rn: # create the mapping from neural region to artist region
             if s in neural_to_artist:
                 neural_to_artist[s].append(r)
@@ -649,24 +685,25 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region)
 
     # split rest regions
     next_label = np.max(fill_map) + 1
-    new_labels = [] # the new splited region means it will definitely be selected
+    new_labels = [] # the new split region means it will definitely be selected
     for r in split_labels_artist:
         if r in fixed_region: continue
         if r in skip_region: continue
         mask = fill_map_artist == r
         # if the mask selected more than one region, then we should refine this mask first
         # the split mask should always only select single region in fill map
-        selected_regions, selected_regions_counts = np.unique(fill_map[mask], return_counts=True)
+        selected_regions, selected_regions_counts = fast_unique_2d(fill_map, mask, True)
+        # selected_regions, selected_regions_counts = np.unique(fill_map[mask], return_counts=True)
         if len(selected_regions) > 1:
             for sr in selected_regions:
-                # if the selected region completly inside the mask, then we should exclude it
+                # if the selected region completely inside the mask, then we should exclude it
                 mask[fill_map == sr] = False
-            # if the artist region is totally coverd by the neural reigons and its size is less than the neural regions
+            # if the artist region is totally covered by the neural regions and its size is less than the neural regions
             # this probably means we should restore the small artist region
             if mask.sum() < 5 and (fill_map == sr).sum() >= selected_regions_counts.sum() * 1.1:
                 mask = fill_map_artist == r
         elif len(selected_regions) == 1:
-            # if this region has been splitted, we also need to skip it
+            # if this region has been split, we also need to skip it
             if (mask == fill_map[selected_regions[0]]).all():
                 continue
         else: 
@@ -836,7 +873,8 @@ def remove_inside_regions(fill_map, mask, region_list, split_map_manual, remove_
         for r in region_list:
             mask[fill_map==r] = False
     else:
-        for r in np.unique(fill_map[mask]):
+        for r in fast_unique_2d(fill_map, mask):
+        # for r in np.unique(fill_map[mask]):
             if r in region_list: continue
             mask[fill_map==r] = False
 
@@ -1001,8 +1039,8 @@ def stroke_to_label(fill_map, stroke_map, stroke_color, fill_palette, precise=Fa
     stroke[stroke_map < 250] = 0
     stroke[stroke_map >= 250] = 1
 
-    
-    labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
+    labels, labels_count = fast_unique_2d(fill_map, stroke==0, True)
+    # labels, labels_count = np.unique(fill_map[stroke == 0], return_counts = True)
     if precise == False:
         _, smap = cv2.connectedComponents((255 - stroke*255).astype(np.uint8), connectivity=8)
         stroke_label = np.unique(smap)
@@ -1043,7 +1081,8 @@ def find_region(fill_map, mask):
     '''
     A helper function to find the most possible region in mask
     '''
-    labels, count = np.unique(fill_map[mask], return_counts=True)
+    labels, count = fast_unique_2d(fill_map, mask, True)
+    # labels, count = np.unique(fill_map[mask], return_counts=True)
     labels = labels[labels != 0]
 
     return labels[np.argsort(count)[-1]]
