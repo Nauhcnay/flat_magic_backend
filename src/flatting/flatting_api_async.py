@@ -10,8 +10,8 @@ from . import flatting_api
 ## Pass `max_workers = N` for exactly `N` parallel processes.
 # import multiprocessing
 # HALF_CORES = max( multiprocessing.cpu_count()//2, 1 ) )
-executor_batch = ProcessPoolExecutor(2)
-executor_interactive = ProcessPoolExecutor(1)
+executor_batch = ProcessPoolExecutor(4)
+executor_interactive = ProcessPoolExecutor(4)
 
 async def run_async( executor, f ):
     ## We expect this to be called from inside an existing loop.
