@@ -116,7 +116,7 @@ def add_alpha(img, line_color = None, opacity = 1):
     img_alpha[:,:,:3] = img.copy()
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
     img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
 
     if isinstance(line_color, str):
@@ -678,7 +678,7 @@ def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region)
 
     return fill_map, new_labels
 
-def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_neural=True):
+def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_only=True):
     '''
     Given:
         fill_neural, pixel map (colorized) from neural fill (transmitting png is faster than numpy array)
@@ -686,7 +686,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
         split_map_manual, user split stroke
         line_artist, input line art (could be modified by split brush) 
     Action:
-        split new region and assgin a random grayscale color, while keep other regions the same
+        split new region and assign a random gray scale color, while keep other regions the same
     '''
     print("Log:\tfine splitting")
     
@@ -702,7 +702,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
     fill_map, palette = to_fillmap(fill_neural)
     
     # here we need a special artist fill map, which need to be generated on the fly (I don't like stroke and tranmit the same data repeatly)
-    if fix_neural:
+    if add_only:
         line_artist_copy = line_artist.copy()
         neural_line = np.array(fillmap_masked_line(fill_map))
         line_artist_copy[line_artist_copy >= 250] = 255
@@ -741,7 +741,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
     split_single_region = np.zeros(fill_map.shape, dtype=np.uint8)
     split_single_region[merged_mask] = 1
     
-    if fix_neural:
+    if add_only:
         split_single_region[line_artist_copy < 240] = 0
     else:
         split_single_region[line_artist < 240] = 0
@@ -770,7 +770,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
     new_temp_label = fill_map.max() + 1
     fill_map[fill_map==0] = new_temp_label
 
-    if fix_neural:
+    if add_only:
         fill_map[line_artist_copy<240] = 0
     else:
         fill_map[line_artist<240] = 0
@@ -790,7 +790,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
     fill, palette = show_fillmap_auto(fill_map, palette)
 
     # update the fill_artist map
-    if fix_neural:
+    if add_only:
         _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
     else:
         _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
@@ -819,6 +819,14 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, fix_ne
             "fill_artist": fill_artist,
             "line_hint": line_hint
             }
+def export_layers(fill_color):
+    print("Log:\textracting flat result to layers")
+    fill_map, palette = to_fillmap(fill_color)
+    flat_layers = get_layers(fill_map, palette)
+    print("Log:\tdone")
+    return {
+        "layers": flat_layers
+    }
 
 def remove_inside_regions(fill_map, mask, region_list, split_map_manual, remove_selected=False):
     '''
@@ -899,12 +907,11 @@ def get_layers(fill_map, palette):
     assert len(labels) <= len(palette)
 
     for region in labels:
-
-        layer = np.ones((h, w, 3), dtype=np.uint8) * 255
+        layer = np.ones((h, w, 4), dtype=np.uint8) * 255
         mask = fill_map == region
-        layer[mask] = palette[region]
-        layer = add_alpha(Image.fromarray(layer))
-        layers.append(layer)
+        layer[:,:,0:3][mask] = palette[region]
+        layer[:,:,3][(1-mask).astype(np.bool)] = 0
+        layers.append(Image.fromarray(layer))
 
     return layers
 

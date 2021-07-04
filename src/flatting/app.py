@@ -118,15 +118,15 @@ async def split_manual( request ):
     fill_artist = np.array(to_pil(data['fill_artist']))
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
-    fix_neural = data['mode']
+    add_only = data['mode']
     if 'userName' in data:
         user = data['userName']
     img_name = data['fileName']
     
     if MULTIPROCESS:
-        splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist, fix_neural)
+        splited = await flatting_api_async.split_manual(fill_neural, fill_artist, stroke, line_artist, add_only)
     else:
-        splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist, fix_neural)
+        splited = flatting_api.split_manual(fill_neural, fill_artist, stroke, line_artist, add_only)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
@@ -137,28 +137,31 @@ async def split_manual( request ):
 
     if LOG:
         now = datetime.now()
-        save_to_log(now, splited['line_neural'], user, img_name, "line_simplified", "split_%s"%str(fix_neural))
-        save_to_log(now, splited['line_artist'], user, img_name, "line_artist", "split_%s"%str(fix_neural))
-        save_to_log(now, splited['fill_color'], user, img_name, "fill_color", "split_%s"%str(fix_neural))
-        save_to_log(now, stroke, user, img_name, "split_stroke", "split_%s"%str(fix_neural))
-        save_to_log(now, splited['fill_artist'], user, img_name, "fill_color_floodfill", "split_%s"%str(fix_neural))
-        save_to_log(now, splited['line_hint'], user, img_name, "line_hint", "split_%s"%str(fix_neural))
+        save_to_log(now, splited['line_neural'], user, img_name, "line_simplified", "split_%s"%str(add_only))
+        save_to_log(now, splited['line_artist'], user, img_name, "line_artist", "split_%s"%str(add_only))
+        save_to_log(now, splited['fill_color'], user, img_name, "fill_color", "split_%s"%str(add_only))
+        save_to_log(now, stroke, user, img_name, "split_stroke", "split_%s"%str(add_only))
+        save_to_log(now, splited['fill_artist'], user, img_name, "fill_color_floodfill", "split_%s"%str(add_only))
+        save_to_log(now, splited['line_hint'], user, img_name, "line_hint", "split_%s"%str(add_only))
         print("Log:\tlogs saved")
     return web.json_response(result)    
 
-@routes.post('/showfillmap')
-async def show_fillmap_manual( request ):
+@routes.post('/flatlayers')
+async def export_fill_to_layers( request ):
     data = await request.json()
-    data = json.loads(data)
+    try:
+        data = json.loads(data)
+    except:
+        print("got dict directly")
 
-    img = to_pil(data['image'])
-    palette = np.array(data['palette'])
-
-    fill_color = flatting_api.show_fillmap_manual(img, palette)
+    img = np.array(to_pil(data['fill_neural']))
+    layers = flatting_api.export_layers(img)
+    layers_base64 = []
+    for layer in layers["layers"]:
+        layers_base64.append(to_base64(layer))
 
     result = {}
-    result["image"] = to_base64(fill_color["fill_color"])
-    result["palette"] = fill_color["palette"].tolist()
+    result["layersImage"] = layers_base64
 
     return web.json_response(result)
 
