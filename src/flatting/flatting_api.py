@@ -116,7 +116,7 @@ def add_alpha(img, line_color = None, opacity = 1):
     img_alpha[:,:,:3] = img.copy()
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
     img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
 
     if isinstance(line_color, str):
@@ -130,7 +130,7 @@ def add_alpha(img, line_color = None, opacity = 1):
 
     return img_alpha
 
-def fillmap_masked_line(fill_map, line_input=None, one_pixel=False):
+def fillmap_masked_line(fill_map, line_input=None, dotted=False):
     '''
     A helper function to extract fill region boundary as lines
     '''
@@ -146,12 +146,23 @@ def fillmap_masked_line(fill_map, line_input=None, one_pixel=False):
         result[edges == 0] = 255
     else:
         # reverse the edge map
-        if one_pixel==False:
-            kernel = np.ones((2,2),np.uint8)
-            edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
+        kernel = np.ones((2,2),np.uint8)
+        edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
         result = np.zeros(edges.shape, np.uint8)
         result[edges == 0] = 255
 
+    # add a grid mask applied to the line, so it could generate
+    # dotted line
+    if dotted:
+        dotted_mask = np.zeros(result.shape)
+        # create mask interval with lenght of 3
+        h, w = result.shape
+        interval_w = np.array([list(range(i, w, 10)) for i in range(2)])
+        interval_h = np.array([list(range(i, h, 10)) for i in range(2)]) 
+        dotted_mask[interval_h.flatten(), :] = 1
+        dotted_mask[:, interval_w.flatten()] = 1
+        dotted_mask = dotted_mask.astype(np.bool)
+        result[dotted_mask] = 255
     return Image.fromarray(result)
 
 # add cropped region back
@@ -255,7 +266,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
 
     # generate line hint layers
     line_simplify = fillmap_masked_line(fill_map)
-    line_hint = fillmap_masked_line(fill_map_artist)
+    line_hint = fillmap_masked_line(fill_map_artist, dotted=True)
     line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 0.7)
     line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
     line_artist = add_alpha(line_input)
@@ -845,7 +856,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
     fill_artist, _ = show_fillmap_auto(fill_map_artist_new)
     # layers = get_layers(fill_map, palette)
 
-    line_hint = fillmap_masked_line(fill_map_artist_new)
+    line_hint = fillmap_masked_line(fill_map_artist_new, dotted=True)
     # the line hint should also be updated
     line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
     line_artist = add_alpha(Image.fromarray(line_artist))
