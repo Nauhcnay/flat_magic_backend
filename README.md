@@ -71,8 +71,6 @@ If briefcase doesn't work, you can use [pyinstaller](https://www.pyinstaller.org
 
     pyinstaller --noconfirm flatting_server.spec
 
-PyInstaller is not listed as a conda dependency, because it's optional. Manually install it via: `conda install -c conda-forge pyinstaller`.
-
 ### 5. Install Photoshop plugin
 Download the [flatting plugin](https://drive.google.com/file/d/1HivdqU2Z2dIL2MvqzEYmCLO2_nDL2Cnk/view?usp=sharing) and unzip it to any place. 
 Download the backend server by following the instructions inside the "flatting plugin.zip"

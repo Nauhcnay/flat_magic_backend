@@ -12,6 +12,7 @@ dependencies:
   - scikit-image
   - pytorch
   - torchvision
+  - appdirs
   - pyinstaller
   - pip
   - pip:
