@@ -10,6 +10,7 @@ from pathlib import Path
 from os.path import exists, join
 from .trapped_ball.run import region_get_map, merge_to_ref, verify_region
 from .trapped_ball.thinning import thinning
+from .trapped_ball.trappedball_fill import show_fill_map
 from PIL import Image
 from .predict import predict_img
 from .unet import UNet
@@ -670,7 +671,7 @@ def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
 
 def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region):
     '''
-    A helper function for corase split
+    A helper function for coarse split
     '''
 
     # find out the region that don't needs to be extract
@@ -763,7 +764,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
         fill_map_artist, _ = to_fillmap(fill_artist)
 
     # merge user modify to lines
-    line_artist[split_map_manual < 240] = 0
+    line_artist[split_map_manual < 250] = 0
 
     # find the region need to be split on artist fill map
     split_labels = stroke_to_label(fill_map_artist, split_map_manual, None, (None, None), True)
@@ -790,9 +791,9 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
     split_single_region[merged_mask] = 1
     
     if add_only:
-        split_single_region[line_artist_copy < 240] = 0
+        split_single_region[line_artist_copy < 250] = 0
     else:
-        split_single_region[line_artist < 240] = 0
+        split_single_region[line_artist < 250] = 0
     
     _, split_regions = cv2.connectedComponents(split_single_region, connectivity=8)
     regions = np.unique(split_regions)
@@ -805,7 +806,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
         for s in regions:
             mask = split_regions == s
             # remove all regions in neural fill map that is contained by this mask
-            # becasue if the old region in fill map could still covered by the new 
+            # because if the old region in fill map could still covered by the new 
             # mask, that means this region is not modified at all, and we should not 
             # change it.
             remove_inside_regions(fill_map, mask, split_labels_neural, split_map_manual)
@@ -819,9 +820,9 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
     fill_map[fill_map==0] = new_temp_label
 
     if add_only:
-        fill_map[line_artist_copy<240] = 0
+        fill_map[line_artist_copy<250] = 0
     else:
-        fill_map[line_artist<240] = 0
+        fill_map[line_artist<250] = 0
 
     fill_map = thinning(fill_map)
     fill_map[fill_map==new_temp_label] = 0
@@ -845,7 +846,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
     
     # clean up regions that less than 0.5% image area
     fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
-    tiny_regions = fill_new[fill_new_count<0.00005*fill_map_artist_new.size]
+    tiny_regions = fill_new[fill_new_count<0.000005*fill_map_artist_new.size]
     tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
     for r in tiny_regions:
         tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
@@ -853,7 +854,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
     fill_map_artist_new = thinning(fill_map_artist_new)
     
     # update to new fill artist
-    fill_artist, _ = show_fillmap_auto(fill_map_artist_new)
+    fill_artist = show_fill_map(fill_map_artist_new)
     # layers = get_layers(fill_map, palette)
 
     line_hint = fillmap_masked_line(fill_map_artist_new, dotted=True)
