@@ -60,7 +60,7 @@ def initial_nets(force_refresh=False):
         checkpoints = Path(sys._MEIPASS)/'checkpoints'
     else:
         # We are running in a normal Python environment.
-        checkpoints = Path(__file__).parent.parent/'checkpoints'
+        checkpoints = Path(__file__).parent/'checkpoints'
 
     try:
         if len(nets) == 0 or force_refresh:

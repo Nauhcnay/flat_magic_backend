@@ -6,7 +6,6 @@ from os.path import join, exists
 
 import numpy as np
 from . import flatting_api
-from . import flatting_api_async
 import base64
 import os
 import io
@@ -16,6 +15,11 @@ import multiprocessing
 
 MULTIPROCESS = False
 LOG = True
+
+if MULTIPROCESS:
+    # Importing this module creates multiprocessing pools, which is problematic
+    # in Briefcase and PyInstaller on macOS.
+    from . import flatting_api_async
 
 routes = web.RouteTableDef()
 
@@ -186,8 +190,10 @@ def to_pil(byte):
     return Image.open(BytesIO(byte))
 
 def save_to_log(date, data, user, img_name, save_name, op):
+    import appdirs
+    log_dir = appdirs.user_log_dir( "Flatting Server", "CraGL" )
     save_folder = "[%s][%s][%s_%s]"%(user, str(date.strftime("%d-%b-%Y %H-%M-%S")), img_name, op)
-    save_folder = join("./logs", save_folder)
+    save_folder = join( log_dir, save_folder)
     if exists(save_folder) == False:
         os.makedirs(save_folder)
     try:
@@ -199,6 +205,13 @@ def save_to_log(date, data, user, img_name, save_name, op):
         print("Warning:\tsave log failed!")
 
 def main():
+    '''
+    import traceback
+    with open('/Users/yotam/Work/GMU/flatting/code/log.txt','a') as f:
+        f.write('=================================================================\n')
+        f.write('__name__: %s\n' % __name__)
+        traceback.print_stack(file=f)
+    '''
     app = web.Application(client_max_size = 1024 * 1024 ** 2)
     app.add_routes(routes)
     web.run_app(app)
