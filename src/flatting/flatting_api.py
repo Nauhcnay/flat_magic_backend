@@ -156,10 +156,18 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False):
     # dotted line
     if dotted:
         dotted_mask = np.zeros(result.shape)
-        # create mask interval with lenght of 3
+        # create mask interval with length of 3
         h, w = result.shape
-        interval_w = np.array([list(range(i, w, 10)) for i in range(2)])
-        interval_h = np.array([list(range(i, h, 10)) for i in range(2)]) 
+        interval_w = []        
+        interval_h = []
+        step = 15
+        thickness = 3        
+        for i in range(thickness):
+            interval_w.append(list(range(i, w//step*step, step)))
+        for i in range(thickness):
+            interval_h.append(list(range(i, h//step*step, step)))
+        interval_w = np.asarray(interval_w)
+        interval_h = np.asarray(interval_h)
         dotted_mask[interval_h.flatten(), :] = 1
         dotted_mask[:, interval_w.flatten()] = 1
         dotted_mask = dotted_mask.astype(np.bool)

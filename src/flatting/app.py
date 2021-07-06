@@ -4,6 +4,7 @@ from io import BytesIO
 from datetime import datetime
 from os.path import join, exists
 
+import appdirs
 import numpy as np
 from . import flatting_api
 import base64
@@ -190,13 +191,12 @@ def to_pil(byte):
     return Image.open(BytesIO(byte))
 
 def save_to_log(date, data, user, img_name, save_name, op):
-    import appdirs
     log_dir = appdirs.user_log_dir( "Flatting Server", "CraGL" )
     save_folder = "[%s][%s][%s_%s]"%(user, str(date.strftime("%d-%b-%Y %H-%M-%S")), img_name, op)
     save_folder = join( log_dir, save_folder)
-    if exists(save_folder) == False:
-        os.makedirs(save_folder)
     try:
+        if exists(save_folder) == False:
+            os.makedirs(save_folder)
         if type(data) == np.ndarray:
             Image.fromarray(data).save(join(save_folder, "%s.png"%save_name))
         else:
