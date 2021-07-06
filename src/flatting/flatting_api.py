@@ -160,8 +160,8 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False):
         h, w = result.shape
         interval_w = []        
         interval_h = []
-        step = 15
-        thickness = 3        
+        step = 5
+        thickness = 1        
         for i in range(thickness):
             interval_w.append(list(range(i, w//step*step, step)))
         for i in range(thickness):
