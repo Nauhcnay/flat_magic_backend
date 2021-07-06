@@ -28,4 +28,6 @@
 
 if __name__ == '__main__':
     from flatting import app
+    ## https://docs.python.org/3/library/multiprocessing.html#multiprocessing.freeze_support
+    if app.MULTIPROCESS: app.multiprocessing.freeze_support()
     app.main()
