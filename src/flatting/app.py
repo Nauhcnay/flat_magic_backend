@@ -14,7 +14,7 @@ import json
 import asyncio
 import multiprocessing
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 LOG = True
 
 if MULTIPROCESS:
@@ -53,9 +53,9 @@ async def flatsingle( request ):
         h_new = None
 
     if MULTIPROCESS:
-        flatted = await flatting_api_async.run_single(img, net, radii, resize, w_new, h_new)
+        flatted = await flatting_api_async.run_single(img, net, radii, resize, w_new, h_new, img_name)
     else:
-        flatted = flatting_api.run_single(img, net, radii, resize, w_new, h_new)
+        flatted = flatting_api.run_single(img, net, radii, resize, w_new, h_new, img_name)
 
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])

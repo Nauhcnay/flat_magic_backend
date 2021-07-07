@@ -216,7 +216,7 @@ def add_cropped_back(img_pil, bbox, img_size):
 
     return Image.fromarray(result)
 
-def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
+def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_name=None):
     '''
     Given:
         line_artst, the line art drawn by artist, 
@@ -238,6 +238,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     assert loaded_initial_nets
     global nets
     line_input = add_white(line_artist)
+    print("Log:\tflatting image %s"%img_name)
     
     # resize the input if resize flag is on
     if resize:
