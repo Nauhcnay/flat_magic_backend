@@ -131,7 +131,7 @@ def add_alpha(img, line_color = None, opacity = 1):
 
     return img_alpha
 
-def fillmap_masked_line(fill_map, line_input=None, dotted=False):
+def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False):
     '''
     A helper function to extract fill region boundary as lines
     '''
@@ -147,8 +147,9 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False):
         result[edges == 0] = 255
     else:
         # reverse the edge map
-        kernel = np.ones((2,2),np.uint8)
-        edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
+        if one_pixel == False:
+            kernel = np.ones((2,2),np.uint8)
+            edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
         result = np.zeros(edges.shape, np.uint8)
         result[edges == 0] = 255
 
@@ -277,7 +278,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None):
     line_simplify = fillmap_masked_line(fill_map)
     line_hint = fillmap_masked_line(fill_map_artist, dotted=True)
     line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 0.7)
-    line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
+    line_hint = add_alpha(line_hint, line_color = "9ae42c", opacity = 1)
     line_artist = add_alpha(line_input)
 
     return {
@@ -436,7 +437,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     if DEBUG:
         print("Log\tgot stroke region ratio size as %s, it should greater than %f"%(str(criteria2), 0.25))
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
-    criteria2 = criteria2 > 0.25
+    criteria2 = criteria2 > 0.05
 
     # criteria 3: still, we need a overall threshold to tell should we split it or not, if the stroke is really large,
     # then the user might want to colorize the whole region.
@@ -640,43 +641,6 @@ def find_mask_bbox(mask):
     r = l + w
     return (t, l, b, r)
 
-def split_auto(fill_neural, fill_artist, split_map_auto, line_artist):
-    '''
-    Given:
-        fill_map, labeled final region map 
-        fill_map_artist, labeled region on artist line only, 
-            this will contain much more regions than the final fill map
-        split_map_auto, a image contains split stroke only
-    Action:
-        split new regions into fill_map
-    '''
-    # get fill map from input
-    fill_map, palette = to_fillmap(fill_neural)
-    fill_map_artist, _ = to_fillmap(fill_artist)
-
-    # preprocessing lines
-    line_artist = add_white(line_artist, return_numpy = True)
-    split_map_auto = add_white(split_map_auto, return_numpy = True)
-
-    # select regions that user want to split
-    print("Log:\tcoarse splitting")
-    split_labels_artist = stroke_to_label(fill_map_artist, split_map_auto)
-    
-    
-
-    fill_map, _ = split_by_labels(split_labels_artist, fill_map, fill_map_artist)
-
-    # update neural line
-    neural_line = fillmap_masked_line(fill_map, line_artist)
-
-    # visualize fill_map and lines
-    fill, _ = show_fillmap_auto(fill_map, palette)
-    neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 0.7)
-
-    return {"line_neural": neural_line,
-            "fill_color": fill,
-            }
-
 def split_by_labels(split_labels_artist, fill_map, fill_map_artist, skip_region):
     '''
     A helper function for coarse split
@@ -867,7 +831,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
 
     line_hint = fillmap_masked_line(fill_map_artist_new, dotted=True)
     # the line hint should also be updated
-    line_hint = add_alpha(line_hint, line_color = "ec91d8", opacity = 0.7)
+    line_hint = add_alpha(line_hint, line_color = "9ae42c", opacity = 0.7)
     line_artist = add_alpha(Image.fromarray(line_artist))
     print("Log:\tdone")
     return {"line_artist": line_artist,
@@ -985,8 +949,8 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
         if color_num > 255:
             palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
         else:
-            # we always generate grayscale color
-            # find grayscale color in the palette
+            # we always generate gray scale color
+            # find gray scale color in the palette
             skip_grayscale = []
             for i in range(len(old_palette)):
                 if old_palette[i][0] == old_palette[i][1] and old_palette[i][1] == old_palette[i][2]:
@@ -999,7 +963,7 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
                 while new_color not in skip_grayscale:
                     new_color = np.random.randint(0, 255, (1, 1), dtype=np.uint8)
                     skip_grayscale.append(int(new_color))
-                # extend its demension size to 3 channels
+                # extend its dimension size to 3 channels
                 new_color = np.repeat(new_color, 3, axis=-1)
                 # append to the end of new palette
                 palette = np.append(palette, new_color, axis=0)
@@ -1009,7 +973,7 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
     else:
         # generally, we need to generate a palette which size is eq or greater than the fill map size
         if grayscale:
-            # according to the five color theroem, this palette should be enough
+            # according to the five color theorem, this palette should be enough
             # but only use five colors will make the extraction of fill map from color image impossible or non-trivial
             # fixed = ["#EEEEEE", "#CCCCCC", "#AAAAAA", "#999999", "#666666"]
             assert color_num < 256
