@@ -575,7 +575,9 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
                         if len(stats) > 2:
                             split_label = fast_unique_2d(skip_mask_cc, stroke_mask)
                             split_label = split_label[split_label != 0]
-                            assert len(split_label) == 1
+                            if len(split_label) != 1:
+                                skip_mask[skip_mask_sl] = True
+                                continue
                             next_label = fill_map.max() + 1
                             iso_mask = skip_mask_cc==split_label    
                             fill_map[iso_mask] = next_label
