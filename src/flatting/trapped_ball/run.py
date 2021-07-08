@@ -11,7 +11,6 @@ import cv2
 # import matplotlib.pyplot as plt
 import os
 import numpy as np
-
 from os.path import *
 
 # use cython adjacency matrix

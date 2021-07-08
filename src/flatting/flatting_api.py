@@ -380,8 +380,9 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     # split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     color_weights = []
 
-    # criteria 5: whenever the brush selected the region in fill_map is completely covered by the same region in 
-    # fill_map_artist, we should NOT select the larger region
+    # criteria 5: whenever the brush selected the region in fill_map (neural map) is completely covered
+    # by the same region in 
+    # fill_map_artist (FF map), we should NOT select the larger region
     criteria5 = []
 
     for sl in split_labels:
@@ -390,7 +391,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
         # if the region in fill_map is covered by the concurrent region in fill
         # find the largest region's color as the selected color
         # generally, we need to build up a relation between fill map and fill
-        froce_false = False
+        froce_false = []
         if len(sp) > 1:
             # find the reigon in fill that have the largest overlay on sl in fill_map
             overlay_size = []
@@ -400,7 +401,9 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
                 overlay_size.append(overlay)
                 # if any region in fill is contained by region in fill_map, we should always NOT split
                 if overlay/(fill==so).sum() > 0.95:
-                    froce_false = True
+                    froce_false.append(True)
+                else:
+                    froce_false.append(False)
             idx_max = np.argsort(overlay_size)[-1]
             sp_max = sp[idx_max]
             so_max = overlay_size[idx_max]
@@ -408,8 +411,11 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
             assert len(sp) == 1
             sp_max = sp
             so_max = np.logical_and((fill_map==sl), (fill==sp)).sum()
+        
+        froce_false = np.array(froce_false)
+        
         if so_max/(fill==sp_max).sum() > 0.9 and\
-            (fill_map==sl).sum()>(fill==sp_max).sum() or froce_false:
+            (fill_map==sl).sum()>(fill==sp_max).sum() or froce_false.all():
             criteria5.append(False)
         else:
             criteria5.append(True)
@@ -504,7 +510,6 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
         2. colorize the new fill map accroding to the merge stroke and its colors.
     '''
     print("Log:\tmerging")
-    
     # pixel map to label
     fill_map, palette = to_fillmap(fill_neural)
     fill_map_fix = fill_map.copy()
