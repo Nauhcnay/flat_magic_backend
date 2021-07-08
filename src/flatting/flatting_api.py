@@ -391,7 +391,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
         # if the region in fill_map is covered by the concurrent region in fill
         # find the largest region's color as the selected color
         # generally, we need to build up a relation between fill map and fill
-        froce_false = []
+        froce_false = [False]
         if len(sp) > 1:
             # find the reigon in fill that have the largest overlay on sl in fill_map
             overlay_size = []
