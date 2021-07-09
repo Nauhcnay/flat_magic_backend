@@ -14,7 +14,7 @@ import json
 import asyncio
 import multiprocessing
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 LOG = True
 
 if MULTIPROCESS:

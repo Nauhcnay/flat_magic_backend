@@ -162,7 +162,7 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False
         interval_w = []        
         interval_h = []
         step = 5
-        thickness = 1        
+        thickness = 2        
         for i in range(thickness):
             interval_w.append(list(range(i, w//step*step, step)))
         for i in range(thickness):
@@ -278,8 +278,8 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     # generate line hint layers
     line_simplify = fillmap_masked_line(fill_map)
     line_hint = fillmap_masked_line(fill_map_artist, dotted=True)
-    line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 0.7)
-    line_hint = add_alpha(line_hint, line_color = "9ae42c", opacity = 1)
+    line_simplify = add_alpha(line_simplify, line_color = "9ae42c", opacity = 1)
+    line_hint = add_alpha(line_hint, line_color = "9ae42c", opacity = 0.7)
     line_artist = add_alpha(line_input)
 
     return {
@@ -377,6 +377,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     
     fill, palette = fill_palette
     split_labels, split_labels_count = fast_unique_2d(fill_map, stroke_mask, True)
+    neural_labels, neural_labels_count = fast_unique_2d(fill, stroke_mask, True)
     # split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     color_weights = []
 
@@ -391,19 +392,27 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
         # if the region in fill_map is covered by the concurrent region in fill
         # find the largest region's color as the selected color
         # generally, we need to build up a relation between fill map and fill
-        froce_false = [False]
+        force_false = []
+        stroke_size_in_artist = split_labels_count[split_labels==sl]
+        stroke_size_in_neural = [0]
         if len(sp) > 1:
-            # find the reigon in fill that have the largest overlay on sl in fill_map
+            # find the region in fill that have the largest overlay on sl in fill_map
             overlay_size = []
             for so in sp:
                 # this will have a problem: we don't know who contains who
                 overlay = np.logical_and((fill_map==sl), (fill==so)).sum()
                 overlay_size.append(overlay)
-                # if any region in fill is contained by region in fill_map, we should always NOT split
-                if overlay/(fill==so).sum() > 0.95:
-                    froce_false.append(True)
+                # neural region covered by artist region, NOT split
+                if overlay/(fill==so).sum() > 0.75:
+                    force_false.append(-1)
+                    stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
+                # artist region is covered by neural region
+                elif overlay/(fill_map==sl).sum() > 0.75:
+                    force_false.append(1)
+                    stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
+                # artist region and neural region are just intersect
                 else:
-                    froce_false.append(False)
+                    force_false.append(0)
             idx_max = np.argsort(overlay_size)[-1]
             sp_max = sp[idx_max]
             so_max = overlay_size[idx_max]
@@ -412,10 +421,24 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
             sp_max = sp
             so_max = np.logical_and((fill_map==sl), (fill==sp)).sum()
         
-        froce_false = np.array(froce_false)
-        
+        force_false = np.unique(np.array(force_false))
+        # the only case that we wish to split is that 
+        # artist region is smaller and covered by any neural region
+        if len(force_false) == 1:
+            if 1 == force_false:
+                force_false = False
+            else:
+                force_false = True
+        elif len(force_false) > 1:
+            if max(stroke_size_in_neural) > max(stroke_size_in_artist):
+                force_false = True
+            else:
+                force_false = False
+        else:
+            force_false = False
+
         if so_max/(fill==sp_max).sum() > 0.9 and\
-            (fill_map==sl).sum()>(fill==sp_max).sum() or froce_false.all():
+            (fill_map==sl).sum()>(fill==sp_max).sum() or force_false:
             criteria5.append(False)
         else:
             criteria5.append(True)
@@ -464,7 +487,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
             criteria3.append(True) # always split for re-colorize
             criteria1_thre.append(100) # if the region is greater than 100 times of smallest region, exclude it
         else:
-            if split_labels_count.sum() < 45 ** 2:
+            if split_labels_count.sum() < 64 ** 2:
                 criteria3.append(True)
             else:
                 criteria3.append(False)
@@ -478,7 +501,7 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     criteria1 = np.array(criteria1)
     criteria1 = (criteria1 / criteria1.min()) < criteria1_thre
     if DEBUG:
-        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 45 ** 2))
+        print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 50 ** 2))
 
     if DEBUG:
         print("Log:\tgot stroke/region as: %s, it should greater than 0.3"%str(criteria4))
@@ -624,7 +647,7 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
     fill, _ = show_fillmap_auto(fill_map, palette)
     fill_map, _ = to_fillmap(fill)
     line_neural = fillmap_masked_line(fill_map)
-    line_neural = add_alpha(line_neural, line_color = "9ae42c", opacity = 0.7)
+    line_neural = add_alpha(line_neural, line_color = "9ae42c", opacity = 1)
     print("Log:\tmerge finished")
 
     return {"line_simplified": line_neural,
@@ -753,7 +776,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
         print("Log:\t(probably) inaccurate input, skip split manual")
         line_artist = add_alpha(Image.fromarray(line_artist))
         neural_line = fillmap_masked_line(fill_map, line_artist)
-        neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 0.7)
+        neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 1)
         fill, palette = show_fillmap_auto(fill_map, palette)
         return {"line_artist": line_artist,
                 "line_neural": neural_line,
@@ -809,7 +832,7 @@ def split_manual(fill_neural, fill_artist, split_map_manual, line_artist, add_on
 
     # update neural line
     neural_line = fillmap_masked_line(fill_map)
-    neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 0.7)
+    neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 1)
     
     # update palette if necssary
     if fill_map.max() >= len(palette):
