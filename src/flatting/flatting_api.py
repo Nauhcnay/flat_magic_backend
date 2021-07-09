@@ -483,14 +483,15 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     criteria1_thre = []
     
     for i, sl in enumerate(split_labels):
+        criteria3.append(True)
         if color_weights[i] < 1:
-            criteria3.append(True) # always split for re-colorize
+            # criteria3.append(True) # always split for re-colorize
             criteria1_thre.append(100) # if the region is greater than 100 times of smallest region, exclude it
         else:
-            if split_labels_count.sum() < 64 ** 2:
-                criteria3.append(True)
-            else:
-                criteria3.append(False)
+            # if split_labels_count.sum() < 64 ** 2:
+            #     criteria3.append(True)
+            # else:
+            #     criteria3.append(False)
             criteria1_thre.append(1000) # if this is the first time colorize, the threshold could be loose
         criteria1.append((fill_map==sl).sum())               
         criteria4.append(split_labels_count[i] / (fill_map==sl).sum())
