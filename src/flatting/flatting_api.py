@@ -347,6 +347,14 @@ def is_grayscale(color):
     b = color[2]
     return r==g and g==b
 
+def thred2(size):
+    # thanks to http://www.qinms.com/webapp/curvefit/cf.aspx
+    A = 313202.152829837
+    B = 0.615388463190035
+    C = 1.85938724219712E-09
+    D = 0.0941919435007196
+    return  min(((A - D) / (1 + (size/C)**B) + D), 0.99)
+
 def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=False):
     '''
     Given
@@ -380,79 +388,103 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     neural_labels, neural_labels_count = fast_unique_2d(fill, stroke_mask, True)
     # split_labels, split_labels_count = np.unique(fill_map[stroke_mask], return_counts=True)
     color_weights = []
+    stroke_size = stroke_mask.sum()
 
     # criteria 5: whenever the brush selected the region in fill_map (neural map) is completely covered
     # by the same region in 
     # fill_map_artist (FF map), we should NOT select the larger region
-    criteria5 = []
+    if for_split:
+        criteria5 = []
 
-    for sl in split_labels:
-        sp = fast_unique_2d(fill, fill_map==sl)
-        # sp = np.unique(fill[fill_map==sl])
-        # if the region in fill_map is covered by the concurrent region in fill
-        # find the largest region's color as the selected color
-        # generally, we need to build up a relation between fill map and fill
-        force_false = []
-        stroke_size_in_artist = split_labels_count[split_labels==sl]
-        stroke_size_in_neural = [0]
-        if len(sp) > 1:
-            # find the region in fill that have the largest overlay on sl in fill_map
-            overlay_size = []
-            for so in sp:
-                # this will have a problem: we don't know who contains who
-                overlay = np.logical_and((fill_map==sl), (fill==so)).sum()
-                overlay_size.append(overlay)
-                # neural region covered by artist region, NOT split
-                if overlay/(fill==so).sum() > 0.75:
-                    force_false.append(-1)
-                    stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
-                # artist region is covered by neural region
-                elif overlay/(fill_map==sl).sum() > 0.75:
-                    force_false.append(1)
-                    stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
-                # artist region and neural region are just intersect
+        for sl in split_labels:
+            artist_mask = fill_map==sl
+            sp = fast_unique_2d(fill, artist_mask)
+            # sp = np.unique(fill[artist_mask])
+            # if the region in fill_map is covered by the concurrent region in fill
+            # find the largest region's color as the selected color
+            # generally, we need to build up a relation between fill map and fill
+            force_false = []
+            stroke_size_in_artist = split_labels_count[split_labels==sl]
+            stroke_size_in_neural = [0]
+            
+            # find the overlay between selected regions in artist map and neural map 
+            # by the same stroke, choose the neural region that have the max overlay 
+            # with each artist region
+            if len(sp) > 1:
+                # find the region in fill that have the largest overlay on sl in fill_map
+                overlay_sizes = []
+                overlay_percentages_cover = []
+                for so in sp:
+                    # this will have a problem: we don't know who contains who
+                    neural_mask = fill==so
+                    overlay = np.logical_and((artist_mask), (neural_mask)).sum()
+                    
+                    # check how much ratio this artist region covers other neural regions
+                    overlay_percentage_cover = overlay/(neural_mask).sum()
+                    # check how much ratio this artist region is covered by other neural regions
+                    overlay_percentage_becovered = overlay/(artist_mask).sum()
+                    overlay_percentages_cover.append(overlay_percentage_cover)
+                    overlay_sizes.append(overlay)
+
+                    # neural region covered by artist region, NOT split
+                    if overlay_percentage_cover > 0.75:
+                        force_false.append(-1)
+                        stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
+                    # artist region is covered by neural region, then we probably need to split
+                    elif overlay_percentage_becovered > 0.75:
+                        force_false.append(1)
+                        stroke_size_in_neural.append(neural_labels_count[neural_labels==so])
+                    # artist region and neural region are just intersect
+                    else:
+                        force_false.append(0)
+                idx_max = np.argsort(overlay_percentages_cover)[-1]
+                sp_max = sp[idx_max]
+                so_max = overlay_sizes[idx_max]
+            else:   
+                assert len(sp) == 1
+                sp_max = sp
+                so_max = np.logical_and((artist_mask), (fill==sp)).sum()
+            
+            force_false = np.unique(np.array(force_false))
+            
+            # Here will be complex, an artist region could cover and be covered by 
+            # a neural region at the same time. if this case happen, then if more stroke
+            # is put into artist region than neural region, then user probably want to split
+            if len(force_false) == 1:
+                if 1 == force_false:
+                    force_false = False
                 else:
-                    force_false.append(0)
-            idx_max = np.argsort(overlay_size)[-1]
-            sp_max = sp[idx_max]
-            so_max = overlay_size[idx_max]
-        else:   
-            assert len(sp) == 1
-            sp_max = sp
-            so_max = np.logical_and((fill_map==sl), (fill==sp)).sum()
-        
-        force_false = np.unique(np.array(force_false))
-        # the only case that we wish to split is that 
-        # artist region is smaller and covered by any neural region
-        if len(force_false) == 1:
-            if 1 == force_false:
-                force_false = False
-            else:
-                force_false = True
-        elif len(force_false) > 1:
-            if max(stroke_size_in_neural) > max(stroke_size_in_artist):
-                force_false = True
+                    force_false = True
+            elif len(force_false) > 1:
+                if max(stroke_size_in_neural) > max(stroke_size_in_artist):
+                    force_false = True
+                else:
+                    force_false = False
             else:
                 force_false = False
-        else:
-            force_false = False
 
-        if so_max/(fill==sp_max).sum() > 0.9 and\
-            (fill_map==sl).sum()>(fill==sp_max).sum() or force_false:
-            criteria5.append(False)
-        else:
-            criteria5.append(True)
-        if is_grayscale(palette[sp_max]):
-            color_weights.append(1) # if first time colorize, give the highest weight
-        elif (palette[sp_max] == stroke_color).all():
-            # if the region has be colorized and have the same color as the current stroke
-            # ignore that region
-            color_weights.append(0) 
-        else:
-            color_weights.append(0.8)
-    assert len(color_weights) == len(split_labels)
-    color_weights = np.array(color_weights)
-    criteria5 = np.array(criteria5)
+            # 1. if the max overlay neural region is almost covered by artist region
+            # 2. or the artist region size is bigger than the neural region (seems not make sense to me...)
+            # should NOT be split
+            if so_max/(fill==sp_max).sum() > 0.9 and\
+                (artist_mask).sum()>(fill==sp_max).sum() or force_false:
+                criteria5.append(False)
+            else:
+                criteria5.append(True)
+
+            if is_grayscale(palette[sp_max]):
+                color_weights.append(1) # if first time colorize, give the highest weight
+            elif (palette[sp_max] == stroke_color).all():
+                # if the region has be colorized and have the same color as the current stroke
+                # ignore that region
+                color_weights.append(0) 
+            else:
+                color_weights.append(0.8)
+        assert len(color_weights) == len(split_labels)
+        color_weights = np.array(color_weights)
+        criteria5 = np.array(criteria5)
+    else:
+        color_weights = np.array([1]*len(split_labels))
 
     DEBUG = False
     if DEBUG and for_split:
@@ -462,13 +494,14 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     # criteria 2: the releative size of merge stroke in each region should be ballance, region which
     # covered by small merge stroke size will be discard
     criteria2 = split_labels_count.copy() * color_weights
-    if criteria2.max() != 0:
-        criteria2 = criteria2 / criteria2.max()
+
     if DEBUG:
         print("Log\tgot stroke region ratio size as %s, it should greater than %f"%(str(criteria2), 0.25))
     # we have to set this large, since the cost of wrong selected is much greater than wrong unselected
-    criteria2 = criteria2 > 0.05
-
+    criteria2_by_maxsize = criteria2 / criteria2.max()
+    for i in range(len(criteria2)):
+        criteria2[i] = criteria2_by_maxsize[i] > thred2(criteria2[i])
+    criteria2 = criteria2.astype(np.bool)
     # criteria 3: still, we need a overall threshold to tell should we split it or not, if the stroke is really large,
     # then the user might want to colorize the whole region.
     # this criteria is FOR SPLIT ONLY!
@@ -484,15 +517,15 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     
     for i, sl in enumerate(split_labels):
         criteria3.append(True)
-        if color_weights[i] < 1:
-            # criteria3.append(True) # always split for re-colorize
-            criteria1_thre.append(100) # if the region is greater than 100 times of smallest region, exclude it
-        else:
-            # if split_labels_count.sum() < 64 ** 2:
-            #     criteria3.append(True)
-            # else:
-            #     criteria3.append(False)
-            criteria1_thre.append(1000) # if this is the first time colorize, the threshold could be loose
+        # if color_weights[i] < 1:
+        #     # criteria3.append(True) # always split for re-colorize
+        #     criteria1_thre.append(100) # if the region is greater than 100 times of smallest region, exclude it
+        # else:
+        #     # if split_labels_count.sum() < 64 ** 2:
+        #     #     criteria3.append(True)
+        #     # else:
+        #     #     criteria3.append(False)
+        #     criteria1_thre.append(1000) # if this is the first time colorize, the threshold could be loose
         criteria1.append((fill_map==sl).sum())               
         criteria4.append(split_labels_count[i] / (fill_map==sl).sum())
     
@@ -500,7 +533,8 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
     criteria4 = np.array(criteria4) * color_weights
     
     criteria1 = np.array(criteria1)
-    criteria1 = (criteria1 / criteria1.min()) < criteria1_thre
+    criteria1 = criteria1 / fill_map.size < 5e-4
+    
     if DEBUG:
         print("Log\tgot stroke pixel size as %s, it should less than %d"%(str(split_labels_count), 50 ** 2))
 
@@ -508,14 +542,28 @@ def select_labels(fill_map, stroke_mask, stroke_color, fill_palette, for_split=F
         print("Log:\tgot stroke/region as: %s, it should greater than 0.3"%str(criteria4))
     criteria4 = criteria4 > 0.3
 
-    # select region that really need to be splited
+    # select region that really need to be spitted
     if for_split:
-        split_labels = split_labels[np.logical_or(
-                            np.logical_and(
-                            np.logical_and(
-                            np.logical_and(criteria1, criteria2), criteria3), criteria5), criteria4)]
-    else:    
-        split_labels = split_labels[np.logical_or(np.logical_and(criteria1, criteria2), criteria4)]
+        selection = np.logical_and(
+                        np.logical_and(criteria2, criteria3), criteria5)
+        for i in range(len(criteria1)):
+            if criteria1[i]:
+                selection[i] = selection[i] or criteria4[i]
+
+        
+    else:
+        selection = criteria2
+        for i in range(len(criteria1)):
+            if criteria1[i]:
+                selection[i] = selection[i] or criteria4[i]
+        # but if for any case that no region is selected, then we should just return what the user selected 
+        # without filtering
+        if (selection == False).all():
+            print("Log:\tseems no region is selected, roll back to no filter mode")
+            selection = np.array([True]*len(selection))
+
+    split_labels = split_labels[selection]
+
     if DEBUG:
         print("Log:\tselected regions %s"%str(split_labels))
         import pdb
@@ -623,15 +671,14 @@ def merge(fill_neural, fill_artist, merge_map, line_artist):
             return fill_map, np.array(new_labels)
         fill_map, new_labels = split_in_merge(stroke, color, fill_map, fill_map_fix, palette, fill_map_artist)
 
-        # re-select regions in new fill map with the same region
-        merge_labels = stroke_to_label(fill_map, stroke, color, (fill_map_fix, palette))
-        merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
-        
-
         # update palette if it can't cover all regions in the new fill map
         # this is very likely to happen cause the split may create many new regions
         if fill_map.max() >= len(palette):
             palette = init_palette(fill_map.max()+1, palette)
+
+        # re-select regions in new fill map with the same region
+        merge_labels = stroke_to_label(fill_map, stroke, color, (fill_map, palette))
+        merge_labels = np.unique(np.concatenate((merge_labels, new_labels)))
 
         # find max region among the re-selected regions, then merge and re-colorize
         max_label = find_max_region(fill_map, merge_labels)
