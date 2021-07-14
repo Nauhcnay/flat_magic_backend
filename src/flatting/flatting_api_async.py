@@ -21,6 +21,9 @@ async def run_async( executor, f ):
     data = await loop.run_in_executor( executor, f )
     return data
 
+async def checkpoint( *args, **kwargs ):
+    return await run_async( executor_interactive, functools.partial( flatting_api.checkpoint, *args, **kwargs ) )
+
 async def run_single( *args, **kwargs ):
     return await run_async( executor_batch, functools.partial( flatting_api.run_single, *args, **kwargs ) )
 
