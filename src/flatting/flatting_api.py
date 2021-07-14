@@ -238,9 +238,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     loaded_initial_nets = initial_nets()
     assert loaded_initial_nets
     global nets
-    line_input = add_white(line_artist, return_numpy = True)
-    _, line_input = cv2.threshold(line_input, 200, 255, cv2.THRESH_BINARY)
-    line_input = Image.fromarray(line_input)
+    line_input = add_white(line_artist)
     print("Log:\tflatting image %s"%img_name)
     
     # resize the input if resize flag is on
@@ -262,6 +260,8 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     del nets[net]
     torch.cuda.empty_cache()
     line_neural = add_cropped_back(line_neural, bbox, line_input.size)
+    _, line_input = cv2.threshold(np.array(line_input), 200, 255, cv2.THRESH_BINARY)
+    line_input = Image.fromarray(line_input)
 
     # refine filling result
     print("Log:\ttrapping ball filling with radius %s"%str(radius))
@@ -271,8 +271,12 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
                                         radius_set=[int(radius)], percentiles=[0],
                                         )
 
+    '''
+    expeirment 1
+    Try to put all regions from two fillmaps together, see if it will be good for use
+    '''
+
     # colorize fill maps with gray scale
-    
     fill, _ = show_fillmap_auto(fill_map)
     
 
@@ -282,6 +286,10 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     return {
         'line_artist': line_artist,
         'fill_color': fill,
+        'line_neural': line_neural,
+        'fill_color_neural': fill_color_neural,
+        'fill_color_artist':fill_color_artist,
+        'fill_color_final':fill_color_final
         }
 
 def to_fillmap(image):

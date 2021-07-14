@@ -381,7 +381,31 @@ def update_adj_matrix(A, source, target):
     return A
 
 def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
-    
+    '''
+    Given:
+        fill_map_ref, the neural map
+        fill_map_source, the refined map combined with neural map and flood fill map
+    '''
+    # this could be imporved as well
+    # r_idx is the region labels
+    F = {} #mapping of large region to ref region
+    for i in range(len(r_idx)):
+        r = r_idx[i]
+
+        if r == 0: continue
+        label_mask = fill_map_source == r
+        idx, count = np.unique(fill_map_ref[label_mask], return_counts=True)
+        most_common = idx[np.argmax(count)]
+        F[r] = most_common
+
+    for r in r_idx:
+        if r == 0: continue
+        label_mask = fill_map_source == r
+        result[label_mask] = F[r]
+
+    return result
+
+def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx, result):
     # this could be imporved as well
     # r_idx is the region labels
     F = {} #mapping of large region to ref region
@@ -715,9 +739,12 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     # now the fill_map_source is clean, no bleeding. but it still contains many "broken" pieces which 
     # should belong to the same semantical regions. So, we can merge these "large but still broken" region
     # together by the neural fill map.
-    print("Log:\tmerge large regions")
-    r_idx_source= np.unique(fill_map_source)
-    result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
+    if False:
+        print("Log:\tmerge large regions")
+        r_idx_source= np.unique(fill_map_source)
+        result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
+    else:
+        result = fill_map_source
     
     return result
 
