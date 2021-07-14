@@ -148,7 +148,7 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False
     else:
         # reverse the edge map
         if one_pixel == False:
-            kernel = np.ones((2,2),np.uint8)
+            kernel = np.ones((3,3),np.uint8)
             edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
         result = np.zeros(edges.shape, np.uint8)
         result[edges == 0] = 255
@@ -279,7 +279,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     # colorize fill maps with gray scale
     fill, _ = show_fillmap_auto(fill_map)
     line_hint = fillmap_masked_line(fill_map)
-    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.7))
+    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.8))
     # generate line hint layers
     line_artist = Image.fromarray(add_alpha(line_input))
     line_artist.paste(line_hint, (0,0), line_hint)
@@ -938,7 +938,11 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
         tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
     fill_map_artist_new[tiny_mask] = 0
     fill_map_artist_new = thinning(fill_map_artist_new)
-    line_artist = add_alpha(Image.fromarray(line_artist))
+    line_artist = Image.fromarray(add_alpha(Image.fromarray(line_artist)))
+    line_hint = fillmap_masked_line(fill_map)
+    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.8))
+    # generate line hint layers
+    line_artist.paste(line_hint, (0,0), line_hint)
     print("Log:\tdone")
     
     return {"line_artist": line_artist,
