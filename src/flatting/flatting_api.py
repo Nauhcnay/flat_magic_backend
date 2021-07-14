@@ -278,11 +278,12 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
 
     # colorize fill maps with gray scale
     fill, _ = show_fillmap_auto(fill_map)
-    
-
+    line_hint = fillmap_masked_line(fill_map)
+    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.7))
     # generate line hint layers
-    line_artist = add_alpha(line_input)
-
+    line_artist = Image.fromarray(add_alpha(line_input))
+    line_artist.paste(line_hint, (0,0), line_hint)
+    
     return {
         'line_artist': line_artist,
         'fill_color': fill,
