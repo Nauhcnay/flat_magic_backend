@@ -1073,7 +1073,7 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
     if old_palette is not None:
         p_size = len(old_palette)
         color_num = color_num if color_num > p_size else p_size+5
-        if color_num > 255:
+        if color_num > 129:
             palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
         else:
             # we always generate gray scale color
@@ -1103,8 +1103,8 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
             # according to the five color theorem, this palette should be enough
             # but only use five colors will make the extraction of fill map from color image impossible or non-trivial
             # fixed = ["#EEEEEE", "#CCCCCC", "#AAAAAA", "#999999", "#666666"]
-            assert color_num < 256
-            step = 1
+            assert color_num < 128
+            step = 2
             palette = np.array([[i, i, i] for i in range(255, max(255-step*(color_num+1), -1), -step)], dtype=np.uint8)
         else:
             # we probably will not use this branch anymore, but just keep it here in case some day we need a random
