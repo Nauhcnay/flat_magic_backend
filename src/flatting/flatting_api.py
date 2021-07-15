@@ -35,7 +35,8 @@ def initial_models(path_to_ckpt):
     
     # init model
     net = UNet(in_channels=1, out_channels=1, bilinear=True)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     net.to(device=device)
     
     # load model
@@ -104,7 +105,7 @@ def add_white(img, return_numpy = False, grayscale=True):
     else:
         return Image.fromarray(img)
 
-def add_alpha(img, line_color = None, opacity = 1):
+def add_alpha(img, line_color = None, opacity = 1, colorize_only=False):
     if img.mode != "RGBA":
         img = img.convert("RGB")
     img = np.array(img)
@@ -113,12 +114,15 @@ def add_alpha(img, line_color = None, opacity = 1):
         return Image.fromarray(img)
     
     h, w, _ = img.shape
-    img_alpha = np.zeros((h,w,4), dtype = np.uint8)
-    img_alpha[:,:,:3] = img.copy()
+    if colorize_only:
+        img_alpha = img.copy()
+    else:
+        img_alpha = np.zeros((h,w,4), dtype = np.uint8)
+        img_alpha[:,:,:3] = img.copy()
 
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
-    img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)
+        img_alpha[:,:,3] = ((255 - img) * opacity).astype(np.uint8)
 
     if isinstance(line_color, str):
         assert len(line_color) == 6
@@ -131,7 +135,7 @@ def add_alpha(img, line_color = None, opacity = 1):
 
     return img_alpha
 
-def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False):
+def fillmap_masked_line(fill_map, line_input=None, dotted=False, two_pixel=False):
     '''
     A helper function to extract fill region boundary as lines
     '''
@@ -147,9 +151,12 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False
         result[edges == 0] = 255
     else:
         # reverse the edge map
-        if one_pixel == False:
-            kernel = np.ones((3,3),np.uint8)
+        if two_pixel:
+            kernel = np.ones((2,2),np.uint8)
             edges = cv2.dilate(edges, kernel, anchor=(1,1), iterations = 1)
+        else:
+            kernel = np.ones((3,3),np.uint8)
+            edges = cv2.dilate(edges, kernel, iterations = 1)
         result = np.zeros(edges.shape, np.uint8)
         result[edges == 0] = 255
 
@@ -161,7 +168,7 @@ def fillmap_masked_line(fill_map, line_input=None, dotted=False, one_pixel=False
         h, w = result.shape
         interval_w = []        
         interval_h = []
-        step = 5
+        step = 10
         thickness = 2        
         for i in range(thickness):
             interval_w.append(list(range(i, w//step*step, step)))
@@ -273,14 +280,18 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
 
     # colorize fill maps with gray scale
     fill, _ = show_fillmap_auto(fill_map)
-    line_hint = fillmap_masked_line(fill_map)
-    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.8))
+    line_hint = fillmap_masked_line(fill_map, two_pixel=True)
+    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 1))
+    line_hint_artist = fillmap_masked_line(fill_map_artist, two_pixel = True, dotted = True)
     # generate line hint layers
-    line_artist = Image.fromarray(add_alpha(line_input))
-    line_artist.paste(line_hint, (0,0), line_hint)
+    line_hint_artist = Image.fromarray(add_alpha(line_hint_artist, line_color = "9ae42c", opacity = 1))
+    line_input.paste(line_hint, (0,0), line_hint)
+    line_input.paste(line_hint_artist, (0,0), line_hint_artist)
     
+    line_input = Image.fromarray(add_alpha(line_input))
+
     return {
-        'line_artist': line_artist,
+        'line_artist': line_input,
         'fill_color': fill,
         'line_neural': line_neural,
         'fill_color_neural': fill_color_neural,
@@ -709,14 +720,23 @@ def checkpoint(fill_neural, line_artist):
     print("Log:\tcreating new checkpoints")
     # pixel map to label
     line_artist = add_white(line_artist, return_numpy=True)
+
     fill_map, palette = remove_lines(fill_neural, line_artist)
     
     # generate feedback results
     fill, _ = show_fillmap_auto(fill_map, palette)
+    # line_hint = fillmap_masked_line(fill_map)
+    # line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 1))
+    # line_hint_artist = fillmap_masked_line(fill_map_artist)
+    # line_hint_artist = Image.fromarray(add_alpha(line_hint_artist, line_color = "9ae42c", opacity = 1))
+    # # generate line hint layers
+    # line_artist = Image.fromarray(add_alpha(line_input))
+    # line_artist.paste(line_hint, (0,0), line_hint)
+    # line_artist.paste(line_hint_artist, (0,0), line_hint_artist)
+    
     print("Log:\tcheckpoint generated")
-
     return {
-            "fill_color": fill
+            "fill_color": fill,
             }
 
 def fast_unique_2d(array_maps, mask, return_counts=False):
@@ -996,6 +1016,8 @@ def show_fillmap_auto(fill_map, palette=None):
     
     if palette is None and region_num < 256:
         palette = init_palette(region_num, grayscale=True)
+        _, count = np.unique(fill_map, return_counts=True)
+        palette = palette[np.argsort(count)[::-1]]
     
     elif palette is None and region_num >= 256:
         palette = init_palette(region_num)
@@ -1050,7 +1072,7 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
     # if the old palette is provide, initialize it based on the old palette
     if old_palette is not None:
         p_size = len(old_palette)
-        color_num = color_num if color_num > p_size else p_size+20
+        color_num = color_num if color_num > p_size else p_size+5
         if color_num > 255:
             palette = np.random.randint(0, 255, (color_num, 3), dtype=np.uint8) 
         else:
@@ -1082,10 +1104,8 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
             # but only use five colors will make the extraction of fill map from color image impossible or non-trivial
             # fixed = ["#EEEEEE", "#CCCCCC", "#AAAAAA", "#999999", "#666666"]
             assert color_num < 256
-            step = 255 // color_num
-            step = min(2, step)
-            offset = np.random.randint
-            palette = np.array([[i-offset(step), i-offset(step), i-offset(step)] for i in range(255, max(255-step*(color_num+1), -1), -step)], dtype=np.uint8)
+            step = 1
+            palette = np.array([[i, i, i] for i in range(255, max(255-step*(color_num+1), -1), -step)], dtype=np.uint8)
         else:
             # we probably will not use this branch anymore, but just keep it here in case some day we need a random
             # color map again
