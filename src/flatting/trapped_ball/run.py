@@ -218,7 +218,7 @@ def region_get_map(path_to_line_sim,
     fillmap_artist_fullsize = verify_region(fillmap_artist_fullsize, True)
     # fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
     
-    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.0002)
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.0005)
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
     
@@ -405,23 +405,41 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
 
     return result
 
-def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx, result):
-    # this could be imporved as well
-    # r_idx is the region labels
-    F = {} #mapping of large region to ref region
+def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx):
+    '''
+    Given:
+        fill_map_ref, the neural map
+        fill_map_source, the refined map combined with neural map and flood fill map
+        r_idx, the region labels of the refined map
+
+    '''
+    result = np.zeros(fill_map_ref.shape, dtype=np.int32)
+    
+    # find the
+    F = {} #mapping of refined region to neural region
+    merge_skip = []
+    region_mask = {}
     for i in range(len(r_idx)):
         r = r_idx[i]
-
         if r == 0: continue
+        # collect mask of each region
         label_mask = fill_map_source == r
-        idx, count = np.unique(fill_map_ref[label_mask], return_counts=True)
-        most_common = idx[np.argmax(count)]
-        F[r] = most_common
-
+        region_mask[r] = label_mask
+        # if the region itself is really large (greater the 5% of the canvas size)
+        if label_mask.sum() > fill_map_ref.size * 0.05:
+            merge_skip.append(r)
+        else:
+            idx, count = np.unique(fill_map_ref[label_mask], return_counts=True)
+            most_common = idx[np.argmax(count)]
+            F[r] = most_common
+    next_label = fill_map_source.max() + 1
     for r in r_idx:
         if r == 0: continue
-        label_mask = fill_map_source == r
-        result[label_mask] = F[r]
+        if r in merge_skip:
+            result[region_mask[r]] = next_label
+            next_label += 1
+        else:
+            result[region_mask[r]] = F[r]
 
     return result
 
@@ -729,7 +747,7 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     w, h = fill_map_ref.shape
     th = int(w * h * th)
     
-    result = np.zeros(fill_map_ref.shape, dtype=np.int32)
+    
     # 1. merge small regions which has neighbors
     # the int64 means long on linux but long long on windows, sad
     print("Log:\tmerge small regions")
@@ -739,12 +757,10 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     # now the fill_map_source is clean, no bleeding. but it still contains many "broken" pieces which 
     # should belong to the same semantical regions. So, we can merge these "large but still broken" region
     # together by the neural fill map.
-    if False:
-        print("Log:\tmerge large regions")
-        r_idx_source= np.unique(fill_map_source)
-        result = merge_to_ref(fill_map_ref, fill_map_source, r_idx_source, result)
-    else:
-        result = fill_map_source
+    print("Log:\tmerge large regions")
+    r_idx_source= np.unique(fill_map_source)
+    result = merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx_source)
+    
     
     return result
 

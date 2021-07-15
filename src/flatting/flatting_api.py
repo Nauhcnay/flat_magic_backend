@@ -271,11 +271,6 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
                                         radius_set=[int(radius)], percentiles=[0],
                                         )
 
-    '''
-    expeirment 1
-    Try to put all regions from two fillmaps together, see if it will be good for use
-    '''
-
     # colorize fill maps with gray scale
     fill, _ = show_fillmap_auto(fill_map)
     line_hint = fillmap_masked_line(fill_map)
@@ -940,7 +935,7 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     fill_map_artist_new = thinning(fill_map_artist_new)
     line_artist = Image.fromarray(add_alpha(Image.fromarray(line_artist)))
     line_hint = fillmap_masked_line(fill_map)
-    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 0.8))
+    line_hint = Image.fromarray(add_alpha(line_hint, line_color = "9ae42c", opacity = 1))
     # generate line hint layers
     line_artist.paste(line_hint, (0,0), line_hint)
     print("Log:\tdone")
@@ -1088,7 +1083,9 @@ def init_palette(color_num = 100, old_palette=None, grayscale=False):
             # fixed = ["#EEEEEE", "#CCCCCC", "#AAAAAA", "#999999", "#666666"]
             assert color_num < 256
             step = 255 // color_num
-            palette = np.array([[i, i, i] for i in range(255, -1, -step)])
+            step = min(2, step)
+            offset = np.random.randint
+            palette = np.array([[i-offset(step), i-offset(step), i-offset(step)] for i in range(255, max(255-step*(color_num+1), -1), -step)], dtype=np.uint8)
         else:
             # we probably will not use this branch anymore, but just keep it here in case some day we need a random
             # color map again
