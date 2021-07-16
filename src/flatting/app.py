@@ -60,16 +60,16 @@ async def flatsingle( request ):
     result = {}
     result['line_artist'] = to_base64(flatted['line_artist'])
     result['image'] = to_base64(flatted['fill_color'])
+    result['line_hint'] = to_base64(flatted['line_hint'])
     line_neural = flatted['line_neural']
     fill_color_neural = flatted['fill_color_neural']
     fill_color_artist = flatted['fill_color_artist']
     fill_color_final = flatted['fill_color_final']
 
-    
-    
     if LOG:
         now = datetime.now()
         save_to_log(now, flatted['line_artist'], user, img_name, "line_artist", "flat")
+        save_to_log(now, flatted['line_hint'], user, img_name, "line_hint", "flat")
         save_to_log(now, img, user, img_name, "input", "flat")
         save_to_log(now, flatted['fill_color'], user, img_name, "fill_color", "flat")        
         save_to_log(now, line_neural, user, img_name, "line_neural", "flat")        
@@ -135,13 +135,14 @@ async def save_checkpoint( request ):
 
     result = {}
     result['image'] = to_base64(cp['fill_color'])
+    result['line_hint'] = to_base64(cp['line_hint'])
 
     if LOG:
         now = datetime.now()
         save_to_log(now, cp['fill_color'], user, img_name, "fill_color_thinned", "checkpoint")
         save_to_log(now, fill_neural, user, img_name, "fill_color", "checkpoint")
         save_to_log(now, line_artist, user, img_name, "line_artist", "checkpoint")
-        
+        save_to_log(now, cp['line_hint'], user, img_name, "line_hint", "checkpoint")
         print("Log:\tlogs saved")
 
     return web.json_response(result)
@@ -171,11 +172,14 @@ async def split_manual( request ):
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
     result['image'] = to_base64(splited['fill_color'])
+    result['line_hint'] = to_base64(splited['line_hint'])
+
 
     if LOG:
         now = datetime.now()
         save_to_log(now, line_artist, user, img_name, "line_artist_before", "split_%s"%str(add_only))
         save_to_log(now, splited['line_artist'], user, img_name, "line_artist_after", "split_%s"%str(add_only))
+        save_to_log(now, splited['line_hint'], user, img_name, "line_hint", "split_%s"%str(add_only))
         save_to_log(now, splited['fill_color'], user, img_name, "fill_color", "split_%s"%str(add_only))
         save_to_log(now, stroke, user, img_name, "split_stroke", "split_%s"%str(add_only))
         print("Log:\tlogs saved")

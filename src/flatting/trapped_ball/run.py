@@ -218,14 +218,63 @@ def region_get_map(path_to_line_sim,
     fillmap_artist_fullsize = verify_region(fillmap_artist_fullsize, True)
     # fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
     
-    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.0005)
+    fillmap_neural_fullsize = bleeding_removal_yotam(fillmap_neural_fullsize_c, fillmap_artist_fullsize, th=0.001)
+    
+   
+    
     fillmap_neural_fullsize[line_artist_fullsize < 125] = 0
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
+
+
+    
+    # # split any region that contains not connected sub-regions
+    # result = verify_region(result, True)
+    # next_label = result.max() + 1
+    # for r in range(result.max() + 1):
+    #     _, r_split = cv2.connectedComponents((result==r).astype(np.uint8), connectivity=8)
+    #     sub_rs = np.unique(r_split)
+    #     if len(sub_rs) > 1:
+    #         for sub_r in sub_rs:
+    #             result[r_split==sub_r] = next_label
+    #             next_label += 1
+    # result = verify_region(result, True)
+
+
     
     # convert final result to graph
     # we have adjacency matrix, we have fillmap, do we really need another graph for it?
     fillmap_artist_fullsize_c = thinning(fillmap_artist_fullsize_c)
     fillmap_neural_fullsize = thinning(fillmap_neural_fullsize)
+    fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize)
+
+    # remove embedding regions
+    def remove_embedding_regions(fillmap):
+        # create adj matrix
+        num_regions = fillmap.max() + 1
+        try:
+            A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int32), num_regions)
+        except:
+            A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int64), num_regions)
+        
+        # find all tiny regions
+        tiny_regions, sizes = np.unique(fillmap, return_counts=True)
+        old_to_new = list(range(len(tiny_regions)+1))
+        tiny_regions = tiny_regions[sizes < (fillmap.size * 0.00001)]
+
+        # merge them to their largest neighbor
+        for tr in tiny_regions:
+            tr_nb = np.where(A[tr,:])[0]
+            tr_nb_size = sizes[tr_nb-1]
+            max_nb = tr_nb[np.argmax(tr_nb_size)]
+            old_to_new[tr] = max_nb
+        old_to_new = np.array(old_to_new)
+
+        return old_to_new[fillmap]
+
+    fillmap_neural_fullsize = remove_embedding_regions(fillmap_neural_fullsize)
+    fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
+
+
 
     fill_artist_fullsize = show_fill_map(fillmap_artist_fullsize_c)
     fill_neural_fullsize = show_fill_map(fillmap_neural_fullsize)
@@ -289,7 +338,7 @@ def fillmap_cartesian_product(fill1, fill2):
 # verify if there is no isolate sub-region in each region, if yes, split it and assign a new region id    
 # Yotam: Can this function be replaced with a single call to cv2.connectedComponents()?
 # Chuan: I think no, to find the bleeding regions on the bounderay, iteratively flood fill each region is necessary
-def verify_region(fillmap, reorder_only=False):
+def verify_region(fillmap, reorder_only=False, start_zero=False):
     fillmap = fillmap.copy().astype(np.int32)
     labels = np.unique(fillmap)
     h, w = fillmap.shape
@@ -352,6 +401,7 @@ def verify_region(fillmap, reorder_only=False):
             old_to_new[i] = idx
             idx += 1
         else:
+            # region 0 is always mapped to 0
             old_to_new[i] = 0
     old_to_new = np.array(old_to_new)
     fillmap_out = old_to_new[fillmap]
@@ -405,7 +455,7 @@ def merge_to_ref(fill_map_ref, fill_map_source, r_idx, result):
 
     return result
 
-def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx):
+def merge_to_ref_exp1(fill_map_ref, fill_map_source):
     '''
     Given:
         fill_map_ref, the neural map
@@ -414,6 +464,9 @@ def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx):
 
     '''
     result = np.zeros(fill_map_ref.shape, dtype=np.int32)
+    # fill_map_source = verify_region(fill_map_source, True)
+    # fill_map_source = thinning(fill_map_source)
+    r_idx = np.unique(fill_map_source)
     
     # find the
     F = {} #mapping of refined region to neural region
@@ -426,12 +479,14 @@ def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx):
         label_mask = fill_map_source == r
         region_mask[r] = label_mask
         # if the region itself is really large (greater the 5% of the canvas size)
-        if label_mask.sum() > fill_map_ref.size * 0.0005:
+        if label_mask.sum() > fill_map_ref.size * 0.00002:
             merge_skip.append(r)
         else:
             idx, count = np.unique(fill_map_ref[label_mask], return_counts=True)
             most_common = idx[np.argmax(count)]
             F[r] = most_common
+
+    # merge all regions in merge_skip to the same label
     next_label = fill_map_source.max() + 1
     for r in r_idx:
         if r == 0: continue
@@ -440,7 +495,6 @@ def merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx):
             next_label += 1
         else:
             result[region_mask[r]] = F[r]
-
     return result
 
 def merge_small_fast(fill_map_ref, fill_map_source, th):
@@ -752,14 +806,16 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     # the int64 means long on linux but long long on windows, sad
     print("Log:\tmerge small regions")
     fill_map_source = merge_small_fast2(fill_map_ref, fill_map_source, th)
-    
+
     # 2. merge large regions
     # now the fill_map_source is clean, no bleeding. but it still contains many "broken" pieces which 
     # should belong to the same semantical regions. So, we can merge these "large but still broken" region
     # together by the neural fill map.
-    print("Log:\tmerge large regions")
-    r_idx_source= np.unique(fill_map_source)
-    result = merge_to_ref_exp1(fill_map_ref, fill_map_source, r_idx_source)
+    if True:
+        print("Log:\tmerge large regions")
+        result = merge_to_ref_exp1(fill_map_ref, fill_map_source)
+    else:
+        result = fill_map_source
     
     
     
