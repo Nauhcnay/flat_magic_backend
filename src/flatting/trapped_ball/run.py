@@ -2,7 +2,7 @@
 from .trappedball_fill import trapped_ball_fill_multi, flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map, merger_fill_2nd
 from .trappedball_fill import get_ball_structuring_element, extract_line, to_masked_line
 from .thinning import thinning
-# from skimage.morphology import skeletonize
+from skimage.morphology import skeletonize
 from PIL import Image
 from tqdm import tqdm
 
@@ -248,9 +248,8 @@ def region_get_map(path_to_line_sim,
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize)
 
     # remove embedding regions
-
-
     fillmap_neural_fullsize = remove_embedding_regions(fillmap_neural_fullsize)
+
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
 
 
@@ -290,7 +289,22 @@ def remove_embedding_regions(fillmap):
     # find all tiny regions
     tiny_regions, sizes = np.unique(fillmap, return_counts=True)
     old_to_new = list(range(len(tiny_regions)+1))
+    strip_regions = tiny_regions[np.logical_and( sizes >= (fillmap.size * 0.00001) , sizes < (fillmap.size * 0.0001))] 
     tiny_regions = tiny_regions[sizes < (fillmap.size * 0.00001)]
+
+    # find all strip like and small regions, that could large than the tiny regions
+    # but they also need to be removed
+    # if a region is thin and long, then its size will not change
+    # too much after skeletonize
+    size_changes = []
+    for r in strip_regions:
+        r_mask = fillmap==r
+        skeleton = skeletonize(r_mask)
+        size_changes.append(skeleton.sum()/r_mask.sum())
+
+    size_changes = np.array(size_changes)
+    strip_regions = strip_regions[size_changes < 0.6]
+    tiny_regions = np.append(tiny_regions, strip_regions)
 
     # merge them to their largest neighbor
     for tr in tiny_regions:
@@ -352,7 +366,7 @@ def verify_region(fillmap, reorder_only=False, start_zero=False):
     # is it possible to crop the image before connectedComponents filling?
     next_label = labels.max() + 1
     if reorder_only == False:
-        print("Log:\tsplit isolate regions in fillmap, this may take 30 to 1 mins")
+        print("Log:\tsplit isolate regions in fillmap, this may take 30s to 1 mins")
         for r in labels:
             if r == 0: continue
             # inital input fill map

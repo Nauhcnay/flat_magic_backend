@@ -816,7 +816,7 @@ def remove_lines(fill_neural, line_artist):
         fill_map = thinning(fill_map)
         return fill_map, palette
 
-def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
+def split_manual(fill_neural, split_map_manual, line_artist, line_hint, add_only=True):
     '''
     Given:
         fill_neural, pixel map (colorized) from neural fill (transmitting PNG is faster than numpy array)
@@ -829,7 +829,11 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     
     # remove alpha channel if necessary
     line_artist = add_white(line_artist, return_numpy = True)
-    fill_map, palette = remove_lines(fill_neural, line_artist)
+    line_hint = add_white(line_hint, return_numpy = True)
+    line_merged = line_artist.copy()
+    line_merged[line_hint<250] = 0
+
+    fill_map, palette = remove_lines(fill_neural, line_merged)
     split_map_manual = add_white(split_map_manual, return_numpy = True)
 
     # convert split map to gray scale
@@ -841,11 +845,7 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     # here we need a special artist fill map, which need to be generated on the fly 
     # (I don't like stroke and transmit the same data repeatedly)
     if add_only:
-        line_artist_copy = line_artist.copy()
-        neural_line = np.array(fillmap_masked_line(fill_map))
-        line_artist_copy[line_artist_copy >= 250] = 255
-        line_artist_copy[line_artist_copy < 250] = 0
-        line_artist_copy[neural_line < 250] = 0
+        line_artist_copy = line_merged
         _, fill_map_artist = cv2.connectedComponents(line_artist_copy, connectivity=8)
         fill_map_artist = thinning(fill_map_artist)
         line_artist_copy[split_map_manual < 250] = 0
@@ -928,19 +928,19 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     fill, palette = show_fillmap_auto(fill_map, palette)
 
     # update the fill_artist map
-    if add_only:
-        _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
-    else:
-        _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
+    # if add_only:
+    #     _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
+    # else:
+    #     _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
     
     # clean up regions that less than 0.5% image area
-    fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
-    tiny_regions = fill_new[fill_new_count<0.000005*fill_map_artist_new.size]
-    tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
-    for r in tiny_regions:
-        tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
-    fill_map_artist_new[tiny_mask] = 0
-    fill_map_artist_new = thinning(fill_map_artist_new)
+    # fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
+    # tiny_regions = fill_new[fill_new_count<0.000005*fill_map_artist_new.size]
+    # tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
+    # for r in tiny_regions:
+    #     tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
+    # fill_map_artist_new[tiny_mask] = 0
+    # fill_map_artist_new = thinning(fill_map_artist_new)
     
     # generate return results
     line_artist = add_alpha(Image.fromarray(line_artist))
@@ -1011,9 +1011,9 @@ def show_fillmap_auto(fill_map, palette=None):
     elif palette is None and region_num >= 256:
         palette = init_palette(region_num)
 
-    if region_num >= len(palette):
+    if region_num >= len(palette) - 1:
         # print("Warning:\tgot region numbers greater than color palette size, which is unusual, please check your if filling result is correct")
-        palette = init_palette(region_num, palette)
+        palette = init_palette(region_num + 1, palette)
 
     return palette[fill_map].astype(np.uint8), palette
 

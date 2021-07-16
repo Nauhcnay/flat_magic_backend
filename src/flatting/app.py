@@ -158,6 +158,7 @@ async def split_manual( request ):
     fill_neural = np.array(to_pil(data['fill_neural']))
     stroke = np.array(to_pil(data['stroke']))
     line_artist = to_pil(data['line_artist'])
+    line_hint = to_pil(data['line_hint'])
     add_only = data['mode']
 
     if 'userName' in data:
@@ -165,9 +166,9 @@ async def split_manual( request ):
     img_name = data['fileName']
     
     if MULTIPROCESS:
-        splited = await flatting_api_async.split_manual(fill_neural, stroke, line_artist, add_only)
+        splited = await flatting_api_async.split_manual(fill_neural, stroke, line_artist, line_hint, add_only)
     else:
-        splited = flatting_api.split_manual(fill_neural, stroke, line_artist, add_only)
+        splited = flatting_api.split_manual(fill_neural, stroke, line_artist, line_hint, add_only)
 
     result = {}
     result['line_artist'] = to_base64(splited['line_artist'])
