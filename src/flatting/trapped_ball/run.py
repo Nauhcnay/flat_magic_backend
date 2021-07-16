@@ -349,8 +349,8 @@ def verify_region(fillmap, reorder_only=False, start_zero=False):
     # is it possible to crop the image before connectedComponents filling?
     next_label = labels.max() + 1
     if reorder_only == False:
-        print("Log:\tsplit isolate regions in fillmap")
-        for r in tqdm(labels):
+        print("Log:\tsplit isolate regions in fillmap, this may take 30 to 1 mins")
+        for r in labels:
             if r == 0: continue
             # inital input fill map
             region = np.ones(fillmap.shape, dtype=np.uint8)
