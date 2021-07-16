@@ -248,28 +248,7 @@ def region_get_map(path_to_line_sim,
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize)
 
     # remove embedding regions
-    def remove_embedding_regions(fillmap):
-        # create adj matrix
-        num_regions = fillmap.max() + 1
-        try:
-            A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int32), num_regions)
-        except:
-            A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int64), num_regions)
-        
-        # find all tiny regions
-        tiny_regions, sizes = np.unique(fillmap, return_counts=True)
-        old_to_new = list(range(len(tiny_regions)+1))
-        tiny_regions = tiny_regions[sizes < (fillmap.size * 0.00001)]
 
-        # merge them to their largest neighbor
-        for tr in tiny_regions:
-            tr_nb = np.where(A[tr,:])[0]
-            tr_nb_size = sizes[tr_nb-1]
-            max_nb = tr_nb[np.argmax(tr_nb_size)]
-            old_to_new[tr] = max_nb
-        old_to_new = np.array(old_to_new)
-
-        return old_to_new[fillmap]
 
     fillmap_neural_fullsize = remove_embedding_regions(fillmap_neural_fullsize)
     fillmap_neural_fullsize = verify_region(fillmap_neural_fullsize, True)
@@ -298,6 +277,30 @@ def region_get_map(path_to_line_sim,
     else:
         return fillmap_neural_fullsize, fillmap_artist_fullsize_c,\
             fill_neural_fullsize, fill_neural, fill_artist_fullsize
+
+def remove_embedding_regions(fillmap):
+    # create adj matrix
+    fillmap = verify_region(fillmap, True)
+    num_regions = fillmap.max() + 1
+    try:
+        A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int32), num_regions)
+    except:
+        A = adjacency_matrix.adjacency_matrix(fillmap.astype(np.int64), num_regions)
+    
+    # find all tiny regions
+    tiny_regions, sizes = np.unique(fillmap, return_counts=True)
+    old_to_new = list(range(len(tiny_regions)+1))
+    tiny_regions = tiny_regions[sizes < (fillmap.size * 0.00001)]
+
+    # merge them to their largest neighbor
+    for tr in tiny_regions:
+        tr_nb = np.where(A[tr,:])[0]
+        tr_nb_size = sizes[tr_nb-1]
+        max_nb = tr_nb[np.argmax(tr_nb_size)]
+        old_to_new[tr] = max_nb
+    old_to_new = np.array(old_to_new)
+
+    return old_to_new[fillmap]
 
 def fillmap_cartesian_product(fill1, fill2):
     '''

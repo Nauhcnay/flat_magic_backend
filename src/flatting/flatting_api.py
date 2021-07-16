@@ -8,7 +8,7 @@ from pathlib import Path
 # sys.path.append(join(dirname(abspath(__file__)), "trapped_ball"))
 # sys.path.append(dirname(abspath(__file__)))
 from os.path import exists, join
-from .trapped_ball.run import region_get_map, merge_to_ref, verify_region
+from .trapped_ball.run import region_get_map, merge_to_ref, verify_region, remove_embedding_regions
 from .trapped_ball.thinning import thinning
 from .trapped_ball.trappedball_fill import show_fill_map
 from PIL import Image
@@ -264,7 +264,7 @@ def run_single(line_artist, net, radius, resize, w_new=None, h_new=None, img_nam
     del nets[net]
     torch.cuda.empty_cache()
     line_neural = add_cropped_back(line_neural, bbox, line_input.size)
-    _, line_input = cv2.threshold(np.array(line_input), 200, 255, cv2.THRESH_BINARY)
+    _, line_input = cv2.threshold(np.array(line_input.convert("L")), 200, 255, cv2.THRESH_BINARY)
     line_input = Image.fromarray(line_input)
 
     # refine filling result
@@ -891,8 +891,9 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     regions = np.unique(split_regions)
     regions = regions[regions != 0]
     if len(regions) > 1:
-        max_region = find_max_region(split_regions, regions)
-        old_label = find_max_region(fill_map, split_labels_neural)
+        # max_region = find_max_region(split_regions, regions)
+        # old_label = find_max_region(fill_map, split_labels_neural)
+        new_to_old = find_old_region(fill_map, split_labels_neural, split_regions, regions)
         next_label = fill_map.max() + 1
         # split regions
         for s in regions:
@@ -902,8 +903,8 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
             # mask, that means this region is not modified at all, and we should not 
             # change it.
             remove_inside_regions(fill_map, mask, split_labels_neural, split_map_manual)
-            if s == max_region:
-                fill_map[mask] = old_label
+            if s in new_to_old:
+                fill_map[mask] = new_to_old[s]
             else:
                 fill_map[mask] = next_label
                 next_label += 1
@@ -920,12 +921,8 @@ def split_manual(fill_neural, split_map_manual, line_artist, add_only=True):
     fill_map[fill_map==new_temp_label] = 0
 
     # update neural line
-    neural_line = fillmap_masked_line(fill_map, )
+    neural_line = fillmap_masked_line(fill_map, one_pixel=True)
     neural_line = add_alpha(neural_line, line_color = "9ae42c", opacity = 1)
-    
-    # update palette if necssary
-    if fill_map.max() >= len(palette):
-        palette = init_palette(fill_map.max()+1, palette)
 
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
@@ -1214,6 +1211,27 @@ def find_max_region(fill_map, selected_labels):
         max_label = labels_sorted[max_idx]
 
     return max_label
+
+def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
+    # collect all masks of both fill map
+    mask_ref = {}
+    for i in idx_ref:
+        mask_ref[i] = fill_map_ref==i
+    mask_target = {}
+    for i in idx_target:
+        mask_target[i] = fill_map_target==i
+
+    # for each mask in ref, find the mask with max union size in target
+    new_to_old = {}
+    for r in mask_ref:
+        sizes = []
+        idxs = []
+        for k, v in mask_target.items():
+            idxs.append(k)
+            sizes.append(np.logical_and(mask_ref[r], v).sum())
+        new_to_old[idxs[np.argmax(sizes)]] = r
+
+    return new_to_old
 
 def is_split_safe(mask, stroke):
     '''
