@@ -1248,7 +1248,9 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target, split_ma
         true_negative = idxs[np.logical_or(ratios==0, np.logical_and(ratios > 0.1, ratios < 0.9))]
         idxs = idxs[np.logical_or(np.logical_and(ratios >0, ratios <= 0.1), ratios >= 0.9)]
         sizes = sizes[np.logical_or(np.logical_and(ratios >0, ratios <= 0.1), ratios >= 0.9)]
-        if len(sizes) > 1:
+        ratios = ratios[ratios >= 0.9]
+
+        if len(sizes) > 1 and (ratios == 1).all() == False:
             new_to_old[idxs[np.argmax(sizes)]] = r
         
         for tn in true_negative:
