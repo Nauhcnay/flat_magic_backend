@@ -1221,15 +1221,32 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
     for i in idx_target:
         mask_target[i] = fill_map_target==i
 
-    # for each mask in ref, find the mask with max union size in target
+    # for each mask in ref:
+    # 1. find the mask with max union size in target if the new generated region is completed covered by the mask in neural map (mask_ref)
+    # 2. find the rest new generated masks in mask_target that is not covered by the mask in neural map
+    # so these two kinds of mask should keep their old labels
     new_to_old = {}
     for r in mask_ref:
         sizes = []
         idxs = []
+        ratios = []
+
         for k, v in mask_target.items():
             idxs.append(k)
             sizes.append(np.logical_and(mask_ref[r], v).sum())
+            ratios.append(np.logical_and(mask_ref[r], v).sum()/v.sum())
+        
+        sizes = np.array(sizes)
+        idxs = np.array(idxs)
+        ratios = np.array(ratios)
+        
+        true_negative = idxs[ratios < 0.9]
+        idxs = idxs[ratios >= 0.9]
+        sizes = sizes[ratios >= 0.9]
         new_to_old[idxs[np.argmax(sizes)]] = r
+        
+        for tn in true_negative:
+            new_to_old[tn] = r
 
     return new_to_old
 
