@@ -1226,11 +1226,12 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
     # 2. find the rest new generated masks in mask_target that is not covered by the mask in neural map
     # so these two kinds of mask should keep their old labels
     new_to_old = {}
+    need_split = []
     for r in mask_ref:
         sizes = []
         idxs = []
         ratios = []
-
+        
         for k, v in mask_target.items():
             idxs.append(k)
             sizes.append(np.logical_and(mask_ref[r], v).sum())
@@ -1240,13 +1241,18 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
         idxs = np.array(idxs)
         ratios = np.array(ratios)
         
-        true_negative = idxs[ratios < 0.9]
-        idxs = idxs[ratios >= 0.9]
-        sizes = sizes[ratios >= 0.9]
+        true_negative = idxs[ratios < 0.95]
+        idxs = idxs[ratios >= 0.95]
+        sizes = sizes[ratios >= 0.95]
         new_to_old[idxs[np.argmax(sizes)]] = r
         
         for tn in true_negative:
-            new_to_old[tn] = r
+            if tn not in need_split:
+                new_to_old[tn] = r
+
+        for ns in mask_target.keys():
+            if ns not in new_to_old:
+                need_split.append(ns)
 
     return new_to_old
 
