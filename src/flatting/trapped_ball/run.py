@@ -828,6 +828,7 @@ def bleeding_removal_yotam(fill_map_ref, fill_map_source, th):
     # now the fill_map_source is clean, no bleeding. but it still contains many "broken" pieces which 
     # should belong to the same semantical regions. So, we can merge these "large but still broken" region
     # together by the neural fill map.
+    # todo: upgrade this function, to make the merging more smart
     if True:
         print("Log:\tmerge large regions")
         result = merge_to_ref_exp1(fill_map_ref, fill_map_source)

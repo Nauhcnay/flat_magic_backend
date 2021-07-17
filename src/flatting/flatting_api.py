@@ -893,16 +893,16 @@ def split_manual(fill_neural, split_map_manual, line_artist, line_hint, add_only
     if len(regions) > 1:
         # max_region = find_max_region(split_regions, regions)
         # old_label = find_max_region(fill_map, split_labels_neural)
-        new_to_old = find_old_region(fill_map, split_labels_neural, split_regions, regions)
+        new_to_old, region_masks = find_old_region(fill_map, split_labels_neural, split_regions, regions, split_map_manual)
         next_label = fill_map.max() + 1
         # split regions
         for s in regions:
-            mask = split_regions == s
+            mask = region_masks[s]
             # remove all regions in neural fill map that is contained by this mask
             # because if the old region in fill map could still covered by the new 
             # mask, that means this region is not modified at all, and we should not 
             # change it.
-            remove_inside_regions(fill_map, mask, split_labels_neural, split_map_manual)
+            # remove_inside_regions(fill_map, mask, split_labels_neural, split_map_manual)
             if s in new_to_old:
                 fill_map[mask] = new_to_old[s]
             else:
@@ -1212,15 +1212,19 @@ def find_max_region(fill_map, selected_labels):
 
     return max_label
 
-def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
+def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target, split_map_manual):
     # collect all masks of both fill map
     mask_ref = {}
     for i in idx_ref:
         mask_ref[i] = fill_map_ref==i
     mask_target = {}
+    mask_target_filtered = {}
     for i in idx_target:
-        mask_target[i] = fill_map_target==i
-
+        mask = fill_map_target==i
+        mask_filtered = mask.copy()
+        remove_inside_regions(fill_map_ref, mask_filtered, idx_ref, split_map_manual)
+        mask_target[i] = mask
+        mask_target_filtered[i] = mask_filtered
     # for each mask in ref:
     # 1. find the mask with max union size in target if the new generated region is completed covered by the mask in neural map (mask_ref)
     # 2. find the rest new generated masks in mask_target that is not covered by the mask in neural map
@@ -1235,16 +1239,17 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
         for k, v in mask_target.items():
             idxs.append(k)
             sizes.append(np.logical_and(mask_ref[r], v).sum())
-            ratios.append(np.logical_and(mask_ref[r], v).sum()/v.sum())
+            ratios.append(np.logical_and(mask_ref[r], v).sum()/v.sum())    
         
         sizes = np.array(sizes)
         idxs = np.array(idxs)
         ratios = np.array(ratios)
         
-        true_negative = idxs[ratios < 0.95]
-        idxs = idxs[ratios >= 0.95]
-        sizes = sizes[ratios >= 0.95]
-        new_to_old[idxs[np.argmax(sizes)]] = r
+        true_negative = idxs[np.logical_or(ratios==0, np.logical_and(ratios > 0.1, ratios < 0.9))]
+        idxs = idxs[np.logical_or(np.logical_and(ratios >0, ratios <= 0.1), ratios >= 0.9)]
+        sizes = sizes[np.logical_or(np.logical_and(ratios >0, ratios <= 0.1), ratios >= 0.9)]
+        if len(sizes) > 1:
+            new_to_old[idxs[np.argmax(sizes)]] = r
         
         for tn in true_negative:
             if tn not in need_split:
@@ -1254,7 +1259,7 @@ def find_old_region(fill_map_ref, idx_ref, fill_map_target, idx_target):
             if ns not in new_to_old:
                 need_split.append(ns)
 
-    return new_to_old
+    return new_to_old, mask_target_filtered
 
 def is_split_safe(mask, stroke):
     '''
