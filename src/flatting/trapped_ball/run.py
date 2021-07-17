@@ -289,7 +289,7 @@ def remove_embedding_regions(fillmap):
     # find all tiny regions
     tiny_regions, sizes = np.unique(fillmap, return_counts=True)
     old_to_new = list(range(len(tiny_regions)+1))
-    strip_regions = tiny_regions[np.logical_and( sizes >= (fillmap.size * 0.00001) , sizes < (fillmap.size * 0.0001))] 
+    strip_regions = tiny_regions[np.logical_and( sizes >= (fillmap.size * 0.00001) , sizes < (fillmap.size * 0.0005))] 
     tiny_regions = tiny_regions[sizes < (fillmap.size * 0.00001)]
 
     # find all strip like and small regions, that could large than the tiny regions
@@ -303,7 +303,7 @@ def remove_embedding_regions(fillmap):
         size_changes.append(skeleton.sum()/r_mask.sum())
 
     size_changes = np.array(size_changes)
-    strip_regions = strip_regions[size_changes < 0.6]
+    strip_regions = strip_regions[size_changes > 0.75]
     tiny_regions = np.append(tiny_regions, strip_regions)
 
     # merge them to their largest neighbor
