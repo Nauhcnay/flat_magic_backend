@@ -916,9 +916,26 @@ def split_manual(fill_neural, split_map_manual, line_artist, line_hint, add_only
         fill_map[line_artist_copy<250] = 0
     else:
         fill_map[line_artist<250] = 0
-
+    
     fill_map = thinning(fill_map)
     fill_map[fill_map==new_temp_label] = 0
+
+    '''
+    # update the fill_artist map
+    if add_only:
+        _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
+    else:
+        _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
+    
+    # clean up regions that less than 0.5% image area
+    fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
+    tiny_regions = fill_new[fill_new_count<0.00005*fill_map_artist_new.size]
+    tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
+    for r in tiny_regions:
+        tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
+    fill_map_artist_new[tiny_mask] = 0
+    fill_map_artist_new = thinning(fill_map_artist_new)
+    '''
 
     # update neural line
     neural_line = fillmap_masked_line(fill_map, one_pixel=True)
@@ -927,21 +944,6 @@ def split_manual(fill_neural, split_map_manual, line_artist, line_hint, add_only
     # visualize fill_map
     fill, palette = show_fillmap_auto(fill_map, palette)
 
-    # update the fill_artist map
-    # if add_only:
-    #     _, fill_map_artist_new = cv2.connectedComponents((line_artist_copy > 250).astype(np.uint8), connectivity=8)
-    # else:
-    #     _, fill_map_artist_new = cv2.connectedComponents((line_artist > 250).astype(np.uint8), connectivity=8)
-    
-    # clean up regions that less than 0.5% image area
-    # fill_new, fill_new_count = np.unique(fill_map_artist_new, return_counts=True)
-    # tiny_regions = fill_new[fill_new_count<0.000005*fill_map_artist_new.size]
-    # tiny_mask = np.zeros(fill_map_artist_new.shape).astype(np.bool)
-    # for r in tiny_regions:
-    #     tiny_mask = np.logical_or(tiny_mask, fill_map_artist_new==r)
-    # fill_map_artist_new[tiny_mask] = 0
-    # fill_map_artist_new = thinning(fill_map_artist_new)
-    
     # generate return results
     line_artist = add_alpha(Image.fromarray(line_artist))
     line_hint = fillmap_masked_line(fill_map, one_pixel = True)
@@ -960,7 +962,7 @@ def export_layers(fill_color, line_artist):
     flat_layers = get_layers(fill_map, palette)
     print("Log:\tdone")
     return {
-        "layers": flat_layers
+        "layers": flat_layers,
     }
 
 def remove_inside_regions(fill_map, mask, region_list, split_map_manual, remove_selected=False):

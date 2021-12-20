@@ -20,8 +20,8 @@ from torchvision import utils
 from PIL import Image
 from io import BytesIO
 
-dir_line = './flatting/size_512/line_croped'
-dir_edge = './flatting/size_512/line_detection_croped'
+dir_line = './dataset/size_512/line_croped'
+dir_edge = './dataset/size_512/line_detection_croped'
 dir_checkpoint = './checkpoints'
 
 def denormalize(img):
