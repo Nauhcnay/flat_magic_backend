@@ -25,14 +25,24 @@ Then:
 To update an already created environment if the `environment.yml` file changes or to change environments, activate and then run `conda env update --file environment.yml --prune`.
 
 ### 2. Download pretrained models
-Download the [pretrained network model](https://drive.google.com/file/d/15l3wPO4WbMk0DmqR7reSU1mHzOaaBCfQ/view?usp=sharing) and unzip `checkpoints.zip` into `./src/flatting/`.
+Download the [pretrained network model](https://drive.google.com/file/d/1NLooRQ8uZ3ZwQnAYjQAiGhOJqit5Q2_J/view?usp=sharing) and unzip `checkpoints.zip` into `./src/flatting/`.
 
 ### 3. Run
+You can run our backend directly by:
 
     cd src
     python -m flatting
 
+
+
 ### 4. Package
+If you just want to run the backend only and don't want to touch the code. We provide a [portable backend (Windows only)](https://drive.google.com/file/d/1s9Z5Qgc9siWMu45iOetEUhuzNfJbjbGw/view?usp=sharing) which packaged by the pyinstaller (see sec 4b.) You can download it and unzip to any place, then run:
+
+    cd flatting_server
+    flatting_server.exe
+
+### 4a. Packaging with Briefcase
+**Issues:** Although briefcase can output a cleaner package of our backend but it seems also hide the running log as well, we currently don't have a good solution for this issue yet.
 
 Use `briefcase` [commands](https://docs.beeware.org/en/latest/tutorial/tutorial-1.html) for packaging. Briefcase can't compile Cython modules, so you must first do that. There is only one. Compile it via `cythonize -i src/flatting/trapped_ball/adjacency_matrix.pyx`.
 
@@ -65,7 +75,7 @@ On my setup, I have to manually edit `edit macOS/app/Flatting/Flatting.app/Conte
 
     assert docstring is not None, "RRef user-facing methods should all have docstrings."
 
-### 4b. Packaging (without briefcase)
+### 4b. Packaging with pyinstaller
 
 If briefcase doesn't work, you can use [pyinstaller](https://www.pyinstaller.org/):
 
